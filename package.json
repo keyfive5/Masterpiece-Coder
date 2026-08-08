@@ -50,7 +50,7 @@
       "target": [
         "portable"
       ],
-      "icon": "build/icon.ico"
+      "signAndEditExecutable": false
     },
     "portable": {
       "artifactName": "Masterpiece Coder.exe"
