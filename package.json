@@ -1,0 +1,59 @@
+{
+  "name": "masterpiece-coder",
+  "productName": "Masterpiece Coder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Type an idea. Watch it become code. An autonomous AI coding agent with a desktop UI — no terminal required.",
+  "author": {
+    "name": "Hasan Zafar",
+    "email": "hzafar300@gmail.com"
+  },
+  "license": "MIT",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "start": "npm run build && electron .",
+    "web": "vite --config vite.config.mjs",
+    "web:build": "vite build --config vite.config.mjs --base ./ --outDir docs",
+    "pack": "npm run build && electron-builder --win portable --publish never"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.0",
+    "monaco-editor": "^0.52.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11"
+  },
+  "build": {
+    "appId": "com.hasanzafar.masterpiececoder",
+    "productName": "Masterpiece Coder",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "portable": {
+      "artifactName": "Masterpiece Coder.exe"
+    }
+  }
+}
