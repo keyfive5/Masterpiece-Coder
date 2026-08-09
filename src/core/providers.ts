@@ -13,7 +13,7 @@ import {
    Provider catalogue
    ================================================================ */
 
-export type Wire = 'anthropic' | 'openai' | 'puter' | 'builtin';
+export type Wire = 'anthropic' | 'openai' | 'puter' | 'builtin' | 'local';
 
 export interface ModelDef {
   id: string;
@@ -77,6 +77,23 @@ export const PROVIDERS: ProviderDef[] = [
     browserOk: true,
     note: 'This one is not a language model — it is a builder that ships with the app, so you are never stuck with nothing. It can make a maze game, snake, a to-do list, a focus timer or a landing page, and a styled starter page for anything else.',
     models: [{ id: 'offline-builder', label: 'Offline builder', blurb: 'No download, no network, always available.' }],
+  },
+  {
+    id: 'local',
+    label: 'On this machine',
+    tagline: 'A real model running on your own GPU. Downloads once, then works offline forever.',
+    wire: 'local',
+    free: true,
+    needsKey: false,
+    browserOk: true,
+    allowCustomModel: true,
+    note: 'First use downloads the model (about 1–3 GB depending on which you pick) and needs a machine with WebGPU. It is much weaker than the hosted models and will need more nudging on anything big — but nothing leaves your computer.',
+    models: [
+      { id: 'Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 Coder 1.5B', blurb: '~1.6 GB. Smallest useful coder.' },
+      { id: 'Qwen2.5-Coder-3B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 Coder 3B', blurb: '~2.5 GB. Noticeably better.' },
+      { id: 'Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 Coder 7B', blurb: '~5.1 GB. Needs a real GPU.' },
+      { id: 'Hermes-3-Llama-3.2-3B-q4f16_1-MLC', label: 'Hermes 3 (3B)', blurb: '~2.3 GB. Good at following instructions.' },
+    ],
   },
   {
     id: 'anthropic',
@@ -802,6 +819,12 @@ export async function runTurn(
   const { provider } = options;
 
   if (provider.wire === 'builtin') return runBuiltin(request, handlers);
+  if (provider.wire === 'local') {
+    // Loaded on demand so the WebLLM bundle never reaches anyone who does not
+    // choose it — it is far bigger than the rest of the app.
+    const { runLocal } = await import('./local');
+    return runLocal(request, handlers);
+  }
   if (provider.wire === 'puter') return runPuter(request, handlers);
   if (provider.wire === 'openai') {
     const endpoint = options.endpointOverride?.trim() || provider.endpoint || '';

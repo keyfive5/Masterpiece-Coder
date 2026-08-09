@@ -157,6 +157,7 @@ export class Agent {
             },
             onToolPending: () => undefined,
             onNotice: (message) => emit({ type: 'notice', level: 'info', message }),
+            onActivity: (label) => emit({ type: 'activity', label }),
           },
           emit,
         );

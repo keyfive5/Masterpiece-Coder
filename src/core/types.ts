@@ -57,6 +57,8 @@ export interface TurnHandlers {
   /** Fired once a tool call's name is known, before its arguments finish streaming. */
   onToolPending?(id: string, name: string): void;
   onNotice?(message: string): void;
+  /** Live status for the activity strip — model downloads, load progress. */
+  onActivity?(label: string): void;
 }
 
 export interface TurnUsage {
