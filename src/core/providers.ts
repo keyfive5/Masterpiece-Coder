@@ -13,7 +13,7 @@ import {
    Provider catalogue
    ================================================================ */
 
-export type Wire = 'anthropic' | 'openai' | 'puter';
+export type Wire = 'anthropic' | 'openai' | 'puter' | 'builtin';
 
 export interface ModelDef {
   id: string;
@@ -66,6 +66,17 @@ export const PROVIDERS: ProviderDef[] = [
       { id: 'gpt-5-nano', label: 'GPT-5 nano', blurb: 'Fastest, but often too weak to finish a build.' },
       { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite', blurb: 'Very fast.' },
     ],
+  },
+  {
+    id: 'builtin',
+    label: 'Built in',
+    tagline: 'Works with no account, no key and no internet. Instant, but only knows a handful of things.',
+    wire: 'builtin',
+    free: true,
+    needsKey: false,
+    browserOk: true,
+    note: 'This one is not a language model — it is a builder that ships with the app, so you are never stuck with nothing. It can make a maze game, snake, a to-do list, a focus timer or a landing page, and a styled starter page for anything else.',
+    models: [{ id: 'offline-builder', label: 'Offline builder', blurb: 'No download, no network, always available.' }],
   },
   {
     id: 'anthropic',
@@ -697,6 +708,78 @@ async function runPuter(request: TurnRequest, handlers: TurnHandlers): Promise<T
 }
 
 /* ================================================================
+   Built in — the offline builder
+   ================================================================ */
+
+/**
+ * Not a language model: a deterministic builder that walks a blueprint out
+ * through the ordinary tool loop, one file per turn, so it looks and behaves
+ * exactly like any other provider. Its job is to guarantee that typing an idea
+ * always produces something real, even with no account and no network.
+ */
+async function runBuiltin(request: TurnRequest, handlers: TurnHandlers): Promise<TurnResult> {
+  const { pickBlueprint } = await import('./builtin/templates');
+
+  const firstUser = request.messages.find((m) => m.role === 'user');
+  const prompt = firstUser && firstUser.role === 'user' ? firstUser.content : '';
+  const blueprint = pickBlueprint(prompt);
+
+  const files = Object.entries(blueprint.files);
+  const step = request.messages.filter((m) => m.role === 'assistant').length;
+
+  const call = (name: string, input: Record<string, unknown>): ToolCall => ({
+    id: `builtin_${step}_${name}_${Date.now()}`,
+    name,
+    input,
+  });
+
+  const done = (text: string, toolCalls: ToolCall[]): TurnResult => {
+    if (text) handlers.onText(text);
+    return {
+      text,
+      thinking: '',
+      toolCalls,
+      native: null,
+      usage: { ...EMPTY_USAGE },
+      stopReason: toolCalls.length ? 'tool_use' : 'end_turn',
+    };
+  };
+
+  // Slight pacing so the build reads as work happening rather than a flash.
+  await new Promise((resolve) => setTimeout(resolve, 260));
+
+  if (step === 0) {
+    const [path, content] = files[0];
+    return done(`Building ${blueprint.title.toLowerCase()} — no network needed for this one.`, [
+      call('update_plan', {
+        todos: blueprint.plan.map((text, i) => ({ text, status: i === 0 ? 'active' : 'pending' })),
+      }),
+      call('write_file', { path, content }),
+    ]);
+  }
+
+  if (step < files.length) {
+    const [path, content] = files[step];
+    const plan = blueprint.plan.map((text, i) => ({
+      text,
+      status: i < step ? 'done' : i === step ? 'active' : 'pending',
+    }));
+    return done('', [call('update_plan', { todos: plan }), call('write_file', { path, content })]);
+  }
+
+  if (step === files.length) {
+    return done('', [
+      call('update_plan', { todos: blueprint.plan.map((text) => ({ text, status: 'done' })) }),
+    ]);
+  }
+
+  return done(
+    `${blueprint.summary}\n\nOpen **Preview** to try it. This came from the built-in builder, so it is a solid starting point rather than a bespoke design — switch to **Free** or your own key in Settings for something made to order.`,
+    [],
+  );
+}
+
+/* ================================================================
    Entry point
    ================================================================ */
 
@@ -718,6 +801,7 @@ export async function runTurn(
 ): Promise<TurnResult> {
   const { provider } = options;
 
+  if (provider.wire === 'builtin') return runBuiltin(request, handlers);
   if (provider.wire === 'puter') return runPuter(request, handlers);
   if (provider.wire === 'openai') {
     const endpoint = options.endpointOverride?.trim() || provider.endpoint || '';
