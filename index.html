@@ -35,5 +35,18 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/renderer/main.tsx"></script>
+    <script>
+      /*
+       * Safety net for GitHub Pages. This file is the Vite dev entry, so if Pages
+       * is pointed at the repo root instead of /docs the module above 404s and the
+       * page stays blank. Detect that and send the visitor to the built app.
+       * Never fires in dev or in the real build, where the app has mounted.
+       */
+      setTimeout(function () {
+        var root = document.getElementById('root');
+        var alreadyBuilt = location.pathname.indexOf('/docs/') !== -1;
+        if (!alreadyBuilt && root && root.children.length === 0) location.replace('./docs/');
+      }, 1500);
+    </script>
   </body>
 </html>
