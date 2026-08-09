@@ -4,95 +4,101 @@
 
 **Type an idea. Watch it become code.**
 
-An autonomous AI coding agent with a real desktop interface — the Claude Code way of working,
-the Cursor way of seeing your files, and not a terminal in sight.
+A free AI coding agent that runs in your browser *and* on your desktop.
+No API key to start. No terminal anywhere.
+
+**[▶ Try it in your browser](https://keyfive5.github.io/Masterpiece-Coder/)**
 
 </div>
 
 ---
 
-## What it is
+## The whole thing in one sentence
 
-You open a folder, describe what you want in plain English, and the agent goes to work:
-it reads your project, writes a plan, creates and edits files, runs commands, checks its own
-output, and tells you what it did. You watch the whole thing happen — the reasoning, every
-tool call, every line that changed — and you can rewind any of it.
+Open it, type *"make me a snake game"*, and watch an agent plan it, write the files, check its
+own work, and hand you something you can play — with the code visible the entire time.
 
-It runs on your machine, against your own Anthropic API key. Nothing is proxied through a
-server, and there is no subscription.
+## Start in ten seconds
+
+There is one box on the first screen. Type into it. That is the whole onboarding.
+
+The first build asks you to sign in once — free, no card, no API key — and that same account
+carries your projects between the web app and the desktop app.
+
+If you would rather bring your own model, you can: **Anthropic**, **OpenAI**, **Google Gemini**
+(free tier), **OpenRouter** (has free models), **Ollama** (local), or any **OpenAI-compatible
+endpoint** you point it at.
+
+| | Free | Needs a key | Notes |
+|---|---|---|---|
+| **Free (Puter)** | ✅ | — | One-click sign-in. Also syncs your projects. |
+| Google Gemini | ✅ free tier | key | Takes about a minute to get one |
+| OpenRouter | ✅ free models | key | One key, hundreds of models |
+| Ollama | ✅ local | — | Desktop app only — a web page cannot reach your machine |
+| Anthropic | — | key | Claude. The strongest coding models. |
+| OpenAI | — | key | GPT |
+| Custom endpoint | depends | optional | LM Studio, vLLM, a gateway at work |
 
 ## What's in the window
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  Masterpiece Coder    my-project ▾      Opus 5 ▾   New  History  ⚙   │
+│  Masterpiece Coder   snake-game ▾   ✦ Free   ☁ you   New chat   ⚙   │
 ├─────────────┬──────────────────────────────┬─────────────────────────┤
-│  EXPLORER   │  index.html  app.js          │  AGENT                  │
+│  FILES      │  index.html   app.js         │  AGENT                  │
 │             │  ─────────────────────────   │                         │
-│  ▸ src      │  [ Code | Diff | Preview ]   │  ▸ Thought process      │
-│    app.js   │                              │  ✓ Write index.html     │
-│  index.html │      Monaco editor with      │  ✓ Edit  style.css      │
-│  README.md  │      full syntax colour      │  ⏳ Run  npm test        │
-│             │                              │                         │
-│  CHANGED    │                              │  Plan            2/3    │
-│  index.html │  ─────────────────────────   │  ☑ Scaffold the page    │
-│    +17 −0   │  Output: npm test            │  ☑ Style the keys       │
-│             │  ✓ 14 passing                │  ☐ Wire up the audio    │
+│  index.html │  [ Code | Diff | Preview ]   │  ▸ Thought process      │
+│  style.css  │                              │  ✓ Write index.html     │
+│  app.js     │      Monaco editor with      │  ✓ Write style.css      │
+│             │      full syntax colour      │  ⏳ Read  app.js         │
+│  CHANGED    │                              │                         │
+│  app.js     │                              │  Plan            2/3    │
+│    +38 −0   │  ─────────────────────────   │  ☑ Build the board      │
+│             │  Output: npm test            │  ☑ Draw the snake       │
+│             │  ✓ 14 passing                │  ☐ Handle collisions    │
 │             │                              │  ┌───────────────────┐  │
-│             │                              │  │ what should we... │  │
+│             │                              │  │ what next?        │  │
 │             │                              │  └───────────────────┘  │
 └─────────────┴──────────────────────────────┴─────────────────────────┘
 ```
 
-**Left — Explorer.** Your project tree, with a dot on every file the agent has touched, and a
-running list of this session's changes with `+`/`−` counts.
-
-**Middle — Code, Diff, Preview.** A real Monaco editor (the one VS Code is built on) with a
-custom theme. Flip to **Diff** to see exactly what changed, line by line, with a one-click
-undo per file. Flip to **Preview** and the app serves your project over http and renders it
-live, so a web page you just described is running seconds later.
-
-**Right — Agent.** The stream: collapsible thought process, a card per tool call that expands
-to show its output, the live plan, and permission prompts when the agent wants to write or run
-something. Below it, the composer — `@` to pin specific files into your prompt.
+**Files** — with a dot on everything the agent touched and a running change list.
+**Code / Diff / Preview** — a real Monaco editor, a line-by-line diff with per-file undo, and a
+live preview of the thing you just built.
+**Agent** — collapsible reasoning, a card per tool call, the live plan, and permission prompts.
 
 ## Features
 
 | | |
 |---|---|
-| **Real agentic loop** | Streams from the Messages API with adaptive thinking, tools, and prompt caching. Runs until the job is done, not one reply and out. |
-| **Nine tools** | read · write · edit · delete · list · glob-find · regex-search · run command · update plan |
-| **Checkpoints** | Every message you send snapshots the files the agent then touches. **History → Rewind** puts them all back. Nothing outside your project folder is ever affected. |
-| **Permissions** | *Ask first* pauses before each write or command. *Autopilot* lets it run. Approve once, or always for that kind of action. |
-| **Live diffs** | Every write produces a proper diff view, plus per-file undo. |
-| **Live preview** | A local static server with an entry-page finder and a reload button. |
-| **Cost meter** | Token counts and running spend in the status bar, so there are never surprises. |
-| **Sandboxed** | Every path the agent touches is resolved and confined to your project folder. `..` cannot escape it. |
-| **Your key, encrypted** | Stored with the OS keychain via Electron `safeStorage`, and sent only to Anthropic. |
+| **Prompt first** | No folder picker, no key wall. The first sentence you type creates the project and starts the build. |
+| **Seven providers** | Free by default; bring your own key for Claude, GPT, Gemini, OpenRouter, Ollama, or any OpenAI-compatible URL. |
+| **Runs anywhere** | The same app on the web (projects in browser storage) and on the desktop (real files, real shell). |
+| **Sign in, switch devices** | Start something in the browser on your laptop, open the desktop app, keep going. |
+| **Checkpoints** | Every message snapshots the files it then touches. History → Rewind puts them all back. |
+| **Live preview** | Desktop serves the folder over http. The web build inlines your CSS, JS and images into a sandboxed frame — no server needed. |
+| **Permissions** | Autopilot by default; switch to *Ask first* and every write and command waits for you. |
+| **Cost meter** | Only ever non-zero when you are using a paid key of your own. |
+| **Sandboxed** | Every path the agent touches is confined to the project. Previewed code runs in an iframe with no access to your account or storage. |
 
-## Running it
+## Running the desktop app
 
-**The easy way** — double-click **`START.bat`**. First run installs and builds (a few minutes,
-once), then the app opens. Every run after that is instant.
+Double-click **`START.bat`** — first run installs and builds, after that it just opens.
 
-**A standalone app** — double-click **`MAKE-EXE.bat`** to package a portable
-`release/Masterpiece Coder.exe` you can put on your desktop or a USB stick. No install, no
-Node.js needed on the machine that runs it.
-
-You need [Node.js](https://nodejs.org) to build, and an
-[Anthropic API key](https://console.anthropic.com/settings/keys) to use it — the app asks for
-the key on first launch and stores it encrypted.
+Or double-click **`MAKE-EXE.bat`** to package **`release/Masterpiece Coder.exe`**, a portable
+app you can drop anywhere. It needs no Node.js on the machine that runs it.
 
 <details>
 <summary>Command line, if you prefer</summary>
 
 ```bash
 npm install
-npm start          # build once, then launch
-npm run dev        # Vite HMR + Electron auto-restart
-npm run web        # the interface in a browser, scripted demo, no key needed
-npm run pack       # portable .exe into release/
-MC_SMOKE=1 npx electron .   # boot, render, report, exit — build smoke test
+npm start                    # build once, then launch the desktop app
+npm run dev                  # Vite HMR + Electron auto-restart
+npm run web                  # the same app in a browser, at localhost:5177
+npm run web:build            # the GitHub Pages build, into docs/
+npm run pack                 # portable .exe into release/
+MC_SMOKE=1 npx electron .    # boot, render, cycle views, report, exit
 ```
 
 </details>
@@ -101,34 +107,41 @@ MC_SMOKE=1 npx electron .   # boot, render, report, exit — build smoke test
 
 ```
 src/
-  main/          Electron main process — the privileged half
-    agent.ts       the streaming agent loop, tool dispatch, graceful API degradation
-    tools.ts       the nine tools, their schemas and their executors
-    workspace.ts   path confinement, tree walking, globbing
-    checkpoints.ts per-turn file snapshots and rewind
-    runner.ts      shell execution with output capping and timeouts
-    prompt.ts      the system prompt
-    static-server.ts  serves the app bundle and the Preview panel
-  preload/       the only bridge between the two — a typed, explicit API surface
-  renderer/      React + Monaco UI
-  shared/        types, line diffing, language detection
+  core/           the agent — identical on the web and on the desktop
+    agent.ts        the loop: stream, call tools, feed results back, repeat
+    providers.ts    seven providers behind three wire formats
+    tools.ts        nine tools, written against a Workspace interface
+    workspace.ts    the Workspace contract + path confinement
+    checkpoints.ts  per-turn snapshots and rewind
+  renderer/
+    host/
+      browser.ts    Workspace on OPFS, direct fetch, inlined preview
+      desktop.ts    Workspace over IPC, network proxied through main
+    components/     React + Monaco UI
+  main/           Electron: files, shell, network proxy, encrypted keys
+  preload/        the only bridge between the two
 ```
 
-The renderer has no Node access at all. It cannot touch the filesystem, the network, or your
-API key — it can only call the handful of methods the preload script exposes. Everything
-privileged happens in `main`, behind path checks.
+The agent loop is written once and injected with a `Workspace` and a `Net`. On the desktop
+those are real files and a main-process fetch proxy (so no provider is ever blocked by CORS,
+and keys stay out of the page). In the browser they are OPFS and a direct `fetch`. Nothing in
+`core/` knows which it got.
 
-The agent loop asks for adaptive thinking with a configurable effort level, prompt caching, and
-server-side model fallback. If an API key's account doesn't support one of those, the loop
-notices the rejection, switches that single feature off, tells you, and carries on — rather than
-failing the request.
+Providers collapse into three wire formats — Anthropic's, OpenAI's, and Puter's — so adding
+another is a table entry, not a new code path. The Anthropic adapter also degrades feature by
+feature: if an account rejects prompt caching or extended thinking, it turns that one thing off,
+says so, and carries on.
 
-## The demo build
+## Two honest notes
 
-`npm run web` runs the interface in an ordinary browser against an in-memory project and a
-scripted agent run. No key, no filesystem, no cost — useful for seeing the interface, or for
-publishing a live demo.
+**Free is genuinely free, but it is a shared service.** The free provider runs on your Puter
+account, and quality and speed depend on what it has available. For serious work, a key of your
+own — Gemini's free tier costs nothing, Claude costs money — will do better.
+
+**Autopilot is the default.** It writes files without asking. Everything is rewindable from
+History, and it can only touch the project folder, but if you would rather approve each step,
+flip to *Ask first* in the composer.
 
 ---
 
-Built with Electron, React, Monaco and the Anthropic TypeScript SDK.
+Built with Electron, React, Monaco, and whichever model you point it at.

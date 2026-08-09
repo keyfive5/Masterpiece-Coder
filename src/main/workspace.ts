@@ -199,20 +199,12 @@ export function globToRegExp(glob: string): RegExp {
   return new RegExp(`^${out}$`, 'i');
 }
 
-/** A compact project overview injected into the system prompt. */
-export async function projectSnapshot(): Promise<string> {
-  const base = getRoot();
-  if (!base) return 'No project folder is open yet.';
-
-  const files = await walk('', { maxEntries: 600, maxDepth: 5 });
-  if (files.length === 0) {
-    return `Project folder: ${base}\nThe folder is currently EMPTY. You are starting a new project from scratch.`;
+/** The page the Preview panel should open, if the project has one. */
+export async function findEntryPage(): Promise<string | null> {
+  if (!getRoot()) return null;
+  for (const candidate of ['index.html', 'public/index.html', 'src/index.html', 'docs/index.html']) {
+    if (await exists(candidate)) return candidate;
   }
-
-  const shown = files.slice(0, 300);
-  const more = files.length - shown.length;
-  const lines = [`Project folder: ${base}`, `Files (${files.length}${more > 0 ? ', first 300 shown' : ''}):`];
-  lines.push(...shown.map((f) => `  ${f}`));
-  if (more > 0) lines.push(`  ...and ${more} more`);
-  return lines.join('\n');
+  const html = (await walk('', { maxEntries: 800, maxDepth: 4 })).filter((f) => f.endsWith('.html'));
+  return html[0] ?? null;
 }

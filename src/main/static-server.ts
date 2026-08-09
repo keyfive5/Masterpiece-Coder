@@ -42,7 +42,10 @@ export interface StaticServer {
  * bundle (so web workers and modules behave exactly as they do on the web) and
  * for the workspace Preview panel.
  */
-export function serveDirectory(initialRoot: string, opts: { spa?: boolean } = {}): Promise<StaticServer> {
+export function serveDirectory(
+  initialRoot: string,
+  opts: { spa?: boolean; preferredPort?: number } = {},
+): Promise<StaticServer> {
   let root = path.resolve(initialRoot);
 
   const server = http.createServer(async (req, res) => {
@@ -91,13 +94,30 @@ export function serveDirectory(initialRoot: string, opts: { spa?: boolean } = {}
   });
 
   return new Promise((resolve, reject) => {
-    server.on('error', reject);
-    server.listen(0, '127.0.0.1', () => {
+    // The app bundle asks for a fixed port so its origin is stable: browser
+    // storage — including the signed-in session — is keyed by origin, and a
+    // random port every launch would sign the user out each time.
+    let wanted = opts.preferredPort ?? 0;
+
+    server.on('error', (err: NodeJS.ErrnoException) => {
+      // Preferred port taken (a second instance, or a leftover socket) — fall
+      // back to any free port rather than failing to start.
+      if (err.code === 'EADDRINUSE' && wanted !== 0) {
+        wanted = 0;
+        server.listen(0, '127.0.0.1');
+        return;
+      }
+      reject(err);
+    });
+
+    // Bound as a listener rather than a listen() callback so it still fires
+    // on the retry above.
+    server.on('listening', () => {
       const address = server.address();
-      const port = typeof address === 'object' && address ? address.port : 0;
+      const bound = typeof address === 'object' && address ? address.port : 0;
       resolve({
-        url: `http://127.0.0.1:${port}/`,
-        port,
+        url: `http://127.0.0.1:${bound}/`,
+        port: bound,
         setRoot(dir: string) {
           root = path.resolve(dir);
         },
@@ -107,5 +127,7 @@ export function serveDirectory(initialRoot: string, opts: { spa?: boolean } = {}
           }),
       });
     });
+
+    server.listen(wanted, '127.0.0.1');
   });
 }

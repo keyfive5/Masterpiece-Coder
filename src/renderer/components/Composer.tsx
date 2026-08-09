@@ -1,21 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { sendMessage, stopAgent, updateSettings } from '../actions';
-import { useStore } from '../store';
-import { api } from '../api';
 import { FileNode } from '../../shared/types';
+import { sendMessage, stopAgent, updateSettings } from '../actions';
+import { host } from '../host';
+import { getState, useStore } from '../store';
 import { Send, Stop } from './Icons';
-
-const STARTERS = [
-  'Build a landing page for a coffee roaster',
-  'Make a snake game I can play in the browser',
-  'Add dark mode to this project',
-  'Explain what this codebase does',
-];
 
 export function Composer() {
   const busy = useStore((s) => s.busy);
-  const workspace = useStore((s) => s.workspace);
-  const chatEmpty = useStore((s) => s.chat.length === 0);
+  const project = useStore((s) => s.project);
   const mode = useStore((s) => s.settings.approvalMode);
 
   const [text, setText] = useState('');
@@ -23,7 +15,6 @@ export function Composer() {
   const [mentions, setMentions] = useState<FileNode[] | null>(null);
   const box = useRef<HTMLTextAreaElement>(null);
 
-  // Grow the textarea with its content, up to the CSS max-height.
   useEffect(() => {
     const el = box.current;
     if (!el) return;
@@ -42,32 +33,34 @@ export function Composer() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const submit = async () => {
+  const submit = () => {
     if (busy || !text.trim()) return;
     const payload = text;
     const files = attachments;
     setText('');
     setAttachments([]);
     setMentions(null);
-    await sendMessage(payload, files);
+    void sendMessage(payload, files);
   };
 
-  // `@` opens a file picker so the user can pin exact files into the prompt.
+  // `@` opens a file picker so exact files can be pinned into the prompt.
   const onChange = async (value: string) => {
     setText(value);
     const match = value.match(/@([\w./-]*)$/);
-    if (!match) {
+    const current = getState().project;
+    if (!match || !current) {
       setMentions(null);
       return;
     }
+    const workspace = host.workspace(current);
     const query = match[1].toLowerCase();
-    const nodes = await api.readTree('');
-    const flat: FileNode[] = [];
-    for (const node of nodes) {
-      if (!node.dir) flat.push(node);
-      else flat.push(...(await api.readTree(node.path)).filter((n) => !n.dir));
-    }
-    setMentions(flat.filter((n) => n.path.toLowerCase().includes(query)).slice(0, 6));
+    const files = await workspace.walk();
+    setMentions(
+      files
+        .filter((f) => f.toLowerCase().includes(query))
+        .slice(0, 6)
+        .map((f) => ({ name: f.split('/').pop() ?? f, path: f, dir: false })),
+    );
   };
 
   const pick = (node: FileNode) => {
@@ -79,16 +72,6 @@ export function Composer() {
 
   return (
     <div className="composer">
-      {chatEmpty && workspace && (
-        <div className="suggestions">
-          {STARTERS.map((s) => (
-            <button key={s} className="suggestion" onClick={() => setText(s)}>
-              {s}
-            </button>
-          ))}
-        </div>
-      )}
-
       {mentions && mentions.length > 0 && (
         <div className="suggestions">
           {mentions.map((node) => (
@@ -118,23 +101,19 @@ export function Composer() {
         <textarea
           ref={box}
           value={text}
-          placeholder={workspace ? 'Describe what you want built…  (@ to attach a file)' : 'Open a project folder first'}
-          onChange={(e) => onChange(e.target.value)}
+          placeholder={project ? 'What next?  (@ to attach a file)' : 'Describe what you want built…'}
+          onChange={(e) => void onChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
-              void submit();
+              submit();
             }
           }}
           spellCheck={false}
         />
         <div className="composer-bar">
           <div className="seg" title="How much freedom the agent has">
-            <button
-              className={mode === 'ask' ? 'on' : ''}
-              onClick={() => updateSettings({ approvalMode: 'ask' })}
-              disabled={busy}
-            >
+            <button className={mode === 'ask' ? 'on' : ''} onClick={() => updateSettings({ approvalMode: 'ask' })} disabled={busy}>
               Ask first
             </button>
             <button
@@ -146,13 +125,13 @@ export function Composer() {
             </button>
           </div>
           <div className="grow" />
-          <span className="hint">⏎ send · ⇧⏎ newline</span>
+          <span className="hint">⏎ send</span>
           {busy ? (
             <button className="btn danger" onClick={stopAgent}>
               <Stop size={12} /> Stop
             </button>
           ) : (
-            <button className="btn primary" onClick={submit} disabled={!text.trim() || !workspace}>
+            <button className="btn primary" onClick={submit} disabled={!text.trim()}>
               <Send size={13} /> Send
             </button>
           )}

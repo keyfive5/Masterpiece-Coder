@@ -1,21 +1,23 @@
 import { app, safeStorage } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { DEFAULT_SETTINGS, Settings } from '../shared/types';
+import { DEFAULT_SETTINGS, ProjectInfo, Settings } from '../shared/types';
 
 interface Persisted {
   settings: Settings;
-  workspace: string | null;
-  recentWorkspaces: string[];
-  /** Base64 of the safeStorage-encrypted key, or a plain key if encryption is unavailable. */
-  apiKey?: string;
-  apiKeyEncrypted?: boolean;
+  project: string | null;
+  projects: ProjectInfo[];
+  /** provider id → base64 of the encrypted key (or the raw key if encryption is unavailable). */
+  keys: Record<string, string>;
+  keysEncrypted: boolean;
 }
 
 const DEFAULTS: Persisted = {
   settings: DEFAULT_SETTINGS,
-  workspace: null,
-  recentWorkspaces: [],
+  project: null,
+  projects: [],
+  keys: {},
+  keysEncrypted: false,
 };
 
 let cache: Persisted | null = null;
@@ -27,16 +29,16 @@ function file(): string {
 function load(): Persisted {
   if (cache) return cache;
   try {
-    const raw = fs.readFileSync(file(), 'utf8');
-    const parsed = JSON.parse(raw) as Partial<Persisted>;
+    const parsed = JSON.parse(fs.readFileSync(file(), 'utf8')) as Partial<Persisted>;
     cache = {
       ...DEFAULTS,
       ...parsed,
       settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
-      recentWorkspaces: parsed.recentWorkspaces ?? [],
+      projects: parsed.projects ?? [],
+      keys: parsed.keys ?? {},
     };
   } catch {
-    cache = { ...DEFAULTS };
+    cache = { ...DEFAULTS, keys: {}, projects: [] };
   }
   return cache;
 }
@@ -47,76 +49,71 @@ function flush(): void {
     fs.mkdirSync(path.dirname(file()), { recursive: true });
     fs.writeFileSync(file(), JSON.stringify(cache, null, 2), 'utf8');
   } catch (err) {
-    console.error('[store] could not persist settings:', err);
+    console.error('[store] could not persist:', err);
   }
 }
 
 export const store = {
-  settings(): Settings {
-    return load().settings;
-  },
+  settings: (): Settings => load().settings,
 
   updateSettings(patch: Partial<Settings>): Settings {
-    const s = load();
-    s.settings = { ...s.settings, ...patch };
+    const state = load();
+    state.settings = { ...state.settings, ...patch };
     flush();
-    return s.settings;
+    return state.settings;
   },
 
-  workspace(): string | null {
-    return load().workspace;
-  },
+  project: (): string | null => load().project,
 
-  setWorkspace(dir: string | null): void {
-    const s = load();
-    s.workspace = dir;
-    if (dir) {
-      s.recentWorkspaces = [dir, ...s.recentWorkspaces.filter((w) => w !== dir)].slice(0, 8);
-    }
+  setProject(location: string | null): void {
+    const state = load();
+    state.project = location;
     flush();
   },
 
-  recentWorkspaces(): string[] {
-    return load().recentWorkspaces.filter((dir) => {
+  projects(): ProjectInfo[] {
+    return load().projects.filter((project) => {
       try {
-        return fs.statSync(dir).isDirectory();
+        return fs.statSync(project.location).isDirectory();
       } catch {
         return false;
       }
     });
   },
 
-  hasApiKey(): boolean {
-    return Boolean(load().apiKey);
+  rememberProject(project: ProjectInfo): void {
+    const state = load();
+    state.projects = [project, ...state.projects.filter((p) => p.location !== project.location)].slice(0, 24);
+    state.project = project.location;
+    flush();
   },
 
-  apiKey(): string | null {
-    const s = load();
-    if (!s.apiKey) return null;
-    if (!s.apiKeyEncrypted) return s.apiKey;
+  key(provider: string): string {
+    const state = load();
+    const stored = state.keys[provider];
+    if (!stored) return '';
+    if (!state.keysEncrypted) return stored;
     try {
-      return safeStorage.decryptString(Buffer.from(s.apiKey, 'base64'));
+      return safeStorage.decryptString(Buffer.from(stored, 'base64'));
     } catch {
-      return null;
+      return '';
     }
   },
 
-  setApiKey(key: string): void {
-    const s = load();
+  setKey(provider: string, key: string): void {
+    const state = load();
     const trimmed = key.trim();
     if (!trimmed) {
-      delete s.apiKey;
-      delete s.apiKeyEncrypted;
-      flush();
-      return;
-    }
-    if (safeStorage.isEncryptionAvailable()) {
-      s.apiKey = safeStorage.encryptString(trimmed).toString('base64');
-      s.apiKeyEncrypted = true;
+      delete state.keys[provider];
+    } else if (safeStorage.isEncryptionAvailable()) {
+      state.keys[provider] = safeStorage.encryptString(trimmed).toString('base64');
+      state.keysEncrypted = true;
     } else {
-      s.apiKey = trimmed;
-      s.apiKeyEncrypted = false;
+      state.keys[provider] = trimmed;
+      state.keysEncrypted = false;
     }
     flush();
   },
+
+  configuredKeys: (): string[] => Object.keys(load().keys),
 };

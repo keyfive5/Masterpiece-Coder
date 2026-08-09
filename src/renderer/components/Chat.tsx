@@ -189,7 +189,7 @@ function Item({ item }: { item: ChatItem }) {
 }
 
 function Empty() {
-  const workspace = useStore((s) => s.workspace);
+  const project = useStore((s) => s.project);
   return (
     <div style={{ margin: 'auto', textAlign: 'center', padding: '30px 16px', color: 'var(--faint)' }}>
       <div
@@ -203,10 +203,10 @@ function Empty() {
         }}
       />
       <div style={{ color: 'var(--text)', fontSize: 15.5, fontWeight: 600, marginBottom: 5 }}>
-        {workspace ? 'What should we build?' : 'Open a folder to begin'}
+        {project ? 'What next?' : 'Describe an idea'}
       </div>
       <div style={{ fontSize: 12.5, maxWidth: 300, margin: '0 auto', lineHeight: 1.6 }}>
-        Describe it in plain language. The agent reads your project, plans, writes the files and checks its own work.
+        Say it in plain language. It reads your project, plans, writes the files and checks its own work.
       </div>
     </div>
   );

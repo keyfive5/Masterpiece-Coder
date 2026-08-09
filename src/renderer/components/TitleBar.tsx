@@ -1,16 +1,18 @@
 import React from 'react';
-import { api, isDemo } from '../api';
-import { chooseWorkspace, newSession, refreshCheckpoints, updateSettings } from '../actions';
+import { providerById } from '../../core/providers';
+import { newSession, signIn, signOut, syncNow } from '../actions';
+import { host, isWeb } from '../host';
 import { setState, useStore } from '../store';
-import { MODELS } from '../../shared/types';
-import { Folder, Gear, History, Minus, Plus, Square, X } from './Icons';
+import { Cloud, Folder, Gear, History, Minus, Plus, Square, X } from './Icons';
 
 export function TitleBar() {
-  const workspace = useStore((s) => s.workspace);
+  const project = useStore((s) => s.project);
   const settings = useStore((s) => s.settings);
+  const account = useStore((s) => s.account);
+  const syncing = useStore((s) => s.syncing);
   const busy = useStore((s) => s.busy);
 
-  const folderName = workspace ? workspace.split(/[\\/]/).filter(Boolean).pop() : null;
+  const provider = providerById(settings.provider);
 
   return (
     <div className="titlebar">
@@ -19,54 +21,64 @@ export function TitleBar() {
         <span>Masterpiece Coder</span>
       </div>
 
-      <button className="crumb" onClick={chooseWorkspace} title={workspace ?? 'Choose a project folder'}>
+      <button className="crumb" onClick={() => setState({ modal: 'projects' })} title="Switch project">
         <Folder size={13} />
-        <span>{folderName ?? 'Open a project folder'}</span>
-      </button>
-
-      <select
-        className="btn no-drag"
-        value={settings.model}
-        onChange={(e) => updateSettings({ model: e.target.value })}
-        disabled={busy}
-        title="Model"
-        style={{ paddingRight: 6 }}
-      >
-        {MODELS.map((m) => (
-          <option key={m.id} value={m.id}>
-            {m.label}
-          </option>
-        ))}
-      </select>
-
-      <button className="btn ghost" onClick={newSession} disabled={busy} title="Clear the conversation and start fresh">
-        <Plus size={13} /> New session
+        <span>{project ? project.name : 'No project'}</span>
       </button>
 
       <button
-        className="btn ghost"
-        onClick={async () => {
-          await refreshCheckpoints();
-          setState({ modal: 'history' });
-        }}
-        title="Rewind the project to an earlier point"
+        className="crumb"
+        onClick={() => setState({ modal: 'settings' })}
+        title={`${provider.label} · ${settings.model}`}
       >
-        <History size={13} /> History
+        <span style={{ color: provider.free ? 'var(--green)' : 'var(--accent-2)' }}>
+          {provider.free ? '✦ Free' : provider.label}
+        </span>
+        <span style={{ color: 'var(--faint)' }}>{settings.model}</span>
+      </button>
+
+      <div style={{ flex: 1 }} />
+
+      <button
+        className={`btn ghost${account ? ' on' : ''}`}
+        onClick={() => (account ? void syncNow() : void signIn())}
+        title={
+          account
+            ? `Signed in as ${account.username}. Click to sync this project now.`
+            : 'Sign in free to use the free AI and sync projects between the web app and the desktop app'
+        }
+      >
+        <Cloud size={13} />
+        {syncing ? 'Syncing…' : account ? account.username : 'Sign in'}
+      </button>
+
+      {account && (
+        <button className="iconbtn" onClick={signOut} title="Sign out">
+          <X size={13} />
+        </button>
+      )}
+
+      <button className="btn ghost" onClick={newSession} disabled={busy} title="Clear the conversation, keep the files">
+        <Plus size={13} /> New chat
+      </button>
+
+      <button className="btn ghost" onClick={() => setState({ modal: 'history' })} title="Rewind changes">
+        <History size={13} />
       </button>
 
       <button className="btn ghost" onClick={() => setState({ modal: 'settings' })} title="Settings">
         <Gear size={13} />
       </button>
 
-      {!isDemo && (
+      {!isWeb && host.window && (
         <div className="winbtns">
-          <button className="winbtn" onClick={() => api.minimize()} aria-label="Minimize">
+          <button className="winbtn" onClick={() => host.window!.minimize()} aria-label="Minimize">
             <Minus size={14} />
           </button>
-          <button className="winbtn" onClick={() => api.toggleMaximize()} aria-label="Maximize">
+          <button className="winbtn" onClick={() => host.window!.toggleMaximize()} aria-label="Maximize">
             <Square size={12} />
           </button>
-          <button className="winbtn close" onClick={() => api.close()} aria-label="Close">
+          <button className="winbtn close" onClick={() => host.window!.close()} aria-label="Close">
             <X size={14} />
           </button>
         </div>

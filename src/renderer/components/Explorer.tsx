@@ -1,28 +1,13 @@
 import React from 'react';
 import { FileNode } from '../../shared/types';
-import { openFile, refreshTree, toggleDir } from '../actions';
-import { setState, useStore } from '../store';
+import { openFile, refreshTree, revertChange, toggleDir } from '../actions';
+import { EMPTY_NODES, setState, useStore } from '../store';
 import { Chevron, Diff, Refresh, Undo } from './Icons';
-import { revertChange } from '../actions';
-
-/** Stable empty array — a fresh `[]` in a selector re-triggers useSyncExternalStore forever. */
-const NONE: FileNode[] = [];
 
 const COLORS: Record<string, string> = {
-  ts: '#5aa9f8',
-  tsx: '#5aa9f8',
-  js: '#f0c33c',
-  jsx: '#f0c33c',
-  json: '#f0c33c',
-  html: '#ff8a5b',
-  css: '#7c8cff',
-  scss: '#ff7bb0',
-  md: '#8b94a8',
-  py: '#4fd6a0',
-  go: '#48d8e6',
-  rs: '#ff9a62',
-  java: '#ff6b6b',
-  svg: '#b98cff',
+  ts: '#5aa9f8', tsx: '#5aa9f8', js: '#f0c33c', jsx: '#f0c33c', json: '#f0c33c',
+  html: '#ff8a5b', css: '#7c8cff', scss: '#ff7bb0', md: '#8b94a8', py: '#4fd6a0',
+  go: '#48d8e6', rs: '#ff9a62', java: '#ff6b6b', svg: '#b98cff',
 };
 
 function badge(name: string): { text: string; color: string } {
@@ -35,7 +20,6 @@ function Node({ node, depth }: { node: FileNode; depth: number }) {
   const children = useStore((s) => s.tree[node.path]);
   const active = useStore((s) => s.active === node.path);
   const changed = useStore((s) => s.changes.some((c) => c.path === node.path));
-
   const mark = badge(node.name);
 
   return (
@@ -57,7 +41,7 @@ function Node({ node, depth }: { node: FileNode; depth: number }) {
         {changed && <span className="dot changed" />}
       </div>
 
-      {node.dir && expanded && (children ?? NONE).map((child) => <Node key={child.path} node={child} depth={depth + 1} />)}
+      {node.dir && expanded && (children ?? EMPTY_NODES).map((child) => <Node key={child.path} node={child} depth={depth + 1} />)}
     </>
   );
 }
@@ -69,7 +53,7 @@ function ChangeList() {
   return (
     <div className="changes">
       <div className="pane-head" style={{ borderTop: '1px solid var(--line-soft)', borderBottom: 'none' }}>
-        Changed this session
+        Changed
         <div className="grow" />
         <span style={{ fontFamily: 'var(--mono)', letterSpacing: 0 }}>{changes.length}</span>
       </div>
@@ -101,13 +85,12 @@ function ChangeList() {
 }
 
 export function Explorer() {
-  const roots = useStore((s) => s.tree[''] ?? NONE);
-  const workspace = useStore((s) => s.workspace);
+  const roots = useStore((s) => s.tree[''] ?? EMPTY_NODES);
 
   return (
     <div className="pane">
       <div className="pane-head">
-        Explorer
+        Files
         <div className="grow" />
         <button className="iconbtn" title="Refresh" onClick={() => refreshTree()}>
           <Refresh size={13} />
@@ -115,7 +98,11 @@ export function Explorer() {
       </div>
 
       <div className="tree">
-        {!workspace && <div style={{ padding: 14, color: 'var(--faint)', fontSize: 12 }}>No folder open.</div>}
+        {roots.length === 0 && (
+          <div style={{ padding: '14px 12px', color: 'var(--faint)', fontSize: 12, lineHeight: 1.6 }}>
+            Empty for now. Describe what you want and the files appear here as they are written.
+          </div>
+        )}
         {roots.map((node) => (
           <Node key={node.path} node={node} depth={0} />
         ))}

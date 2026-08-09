@@ -1,12 +1,16 @@
-import { AgentEvent, Settings } from '../shared/types';
-import { api } from './api';
-import { applyAppState, getState, patchChat, pushChat, setState, toast } from './store';
+import { Agent } from '../core/agent';
+import { loadPuter, providerById, puterAuth } from '../core/providers';
+import { Workspace } from '../core/workspace';
+import { AgentEvent, ProjectInfo, Settings } from '../shared/types';
+import { host } from './host';
+import { getState, patchChat, pushChat, setState, toast } from './store';
+import { cancelPush, schedulePush } from './sync';
 
 /* ---------------------------------------------------------------- *
- * Streaming deltas arrive faster than React should re-render, so we
- * buffer them and flush on a short timer. A timer rather than an
- * animation frame: rAF stops firing while the window is minimised or
- * occluded, which would leave a reply frozen mid-sentence.
+ * Streaming deltas arrive far faster than React should re-render, so
+ * they are buffered and flushed on a short timer. A timer rather than
+ * an animation frame: rAF stops while the window is minimised, which
+ * would leave a reply frozen mid-sentence.
  * ---------------------------------------------------------------- */
 const deltaBuffer = new Map<string, string>();
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -28,10 +32,24 @@ function queueFlush(): void {
   }, 32);
 }
 
-export function handleEvent(event: AgentEvent): void {
+/* ---------------------------------------------------------------- agent */
+
+let workspace: Workspace | null = null;
+
+const agent = new Agent({
+  net: host.net,
+  platform: host.platform,
+  keyFor: (provider) => keyCache[provider] ?? '',
+  requestSignIn: async () => signIn(true),
+});
+
+/** Keys are read once at boot so the agent can stay synchronous. */
+const keyCache: Record<string, string> = {};
+
+function handleEvent(event: AgentEvent): void {
   switch (event.type) {
     case 'turn_start':
-      setState({ busy: true, turnId: event.turnId });
+      setState({ busy: true });
       break;
 
     case 'block_start':
@@ -44,7 +62,7 @@ export function handleEvent(event: AgentEvent): void {
       break;
 
     case 'block_end':
-      patchChat(event.id, { done: true } as any);
+      patchChat(event.id, { done: true });
       break;
 
     case 'tool_start':
@@ -52,7 +70,7 @@ export function handleEvent(event: AgentEvent): void {
       break;
 
     case 'tool_end':
-      patchChat(event.id, { status: event.status, summary: event.summary, detail: event.detail } as any);
+      patchChat(event.id, { status: event.status, summary: event.summary, detail: event.detail });
       break;
 
     case 'approval_request':
@@ -60,7 +78,7 @@ export function handleEvent(event: AgentEvent): void {
       break;
 
     case 'approval_resolved':
-      patchChat(event.id, { resolved: event.approved } as any);
+      patchChat(event.id, { resolved: event.approved });
       break;
 
     case 'todos':
@@ -70,26 +88,23 @@ export function handleEvent(event: AgentEvent): void {
     case 'file_change': {
       const change = event.change;
       setState((s) => {
-        const changes = [...s.changes.filter((c) => c.path !== change.path), change];
-        // Keep an open editor tab in sync with what the agent just wrote.
         const open = s.files[change.path];
-        const files = open
-          ? {
-              ...s.files,
-              [change.path]: { ...open, content: change.after ?? '', original: change.after ?? '', dirty: false },
-            }
-          : s.files;
-        return { changes, files, diffPath: change.path, center: s.center === 'preview' ? 'preview' : 'diff' };
+        return {
+          changes: [...s.changes.filter((c) => c.path !== change.path), change],
+          files: open
+            ? { ...s.files, [change.path]: { ...open, content: change.after ?? '', original: change.after ?? '', dirty: false } }
+            : s.files,
+          diffPath: change.path,
+          center: s.center === 'preview' ? 'preview' : 'diff',
+        };
       });
       void refreshTree();
+      queueSync();
       break;
     }
 
     case 'command_output':
-      setState((s) => ({
-        output: (s.output + event.chunk).slice(-120_000),
-        outputOpen: true,
-      }));
+      setState((s) => ({ output: (s.output + event.chunk).slice(-120_000), outputOpen: true }));
       break;
 
     case 'usage':
@@ -106,46 +121,105 @@ export function handleEvent(event: AgentEvent): void {
       pushChat({ kind: 'notice', id: `n_${Date.now()}_${Math.random()}`, level: event.level, message: event.message });
       break;
 
-    case 'turn_end':
+    case 'need_key':
+      setState({ modal: 'key', keyProvider: event.provider });
       break;
 
     case 'idle':
-      setState({ busy: false });
-      void refreshCheckpoints();
+      setState({ busy: false, checkpoints: agent.checkpoints.list() });
+      // Refresh the preview so a finished build is immediately visible.
+      if (getState().center === 'preview') void openPreview();
+      break;
+
+    case 'turn_end':
       break;
   }
 }
 
-/* ---------------------------------------------------------------- *
- * Operations
- * ---------------------------------------------------------------- */
+/* ---------------------------------------------------------------- boot */
 
 export async function boot(): Promise<void> {
-  applyAppState(await api.getState());
-  api.onEvent(handleEvent);
-  api.onWorkspaceChanged(async (dir) => {
-    setState({
-      workspace: dir,
-      tree: {},
-      expanded: [],
-      tabs: [],
-      active: null,
-      files: {},
-      chat: [],
-      todos: [],
-      changes: [],
-      output: '',
-      previewUrl: null,
-      center: 'editor',
-    });
-    await refreshTree();
-  });
-  if (getState().workspace) await refreshTree();
+  const [settings, keys, projects] = await Promise.all([host.getSettings(), host.configuredKeys(), host.listProjects()]);
+  for (const provider of keys) keyCache[provider] = await host.getKey(provider);
+
+  setState({ settings, configuredKeys: keys, projects, ready: true });
+
+  // Restore the Puter session quietly if there is one.
+  void (async () => {
+    if (!(await loadPuter())) return;
+    if (!puterAuth.isSignedIn()) return;
+    const account = await puterAuth.user();
+    if (account) setState({ account });
+  })();
+
+  const last = await host.lastProject();
+  if (last) await activateProject(last);
+
+  const events = (window as any).mcEvents;
+  events?.onProjectChanged?.((project: ProjectInfo) => void activateProject(project));
 }
 
+async function activateProject(project: ProjectInfo): Promise<void> {
+  workspace = host.workspace(project);
+  agent.reset();
+  cancelPush();
+  setState({
+    project,
+    tree: {},
+    expanded: [],
+    tabs: [],
+    active: null,
+    files: {},
+    chat: [],
+    todos: [],
+    changes: [],
+    output: '',
+    preview: null,
+    center: 'editor',
+    usage: { input: 0, output: 0, cost: 0 },
+    checkpoints: [],
+  });
+  await refreshTree();
+}
+
+/* ---------------------------------------------------------------- projects */
+
+export async function newProject(name: string): Promise<ProjectInfo> {
+  const project = await host.createProject(name);
+  setState((s) => ({ projects: [project, ...s.projects.filter((p) => p.id !== project.id)] }));
+  await activateProject(project);
+  return project;
+}
+
+export async function openProject(location: string): Promise<void> {
+  const project = await host.openProject(location);
+  if (project) await activateProject(project);
+  else toast('That project could not be opened.');
+}
+
+export async function chooseProjectFolder(): Promise<void> {
+  const project = await host.chooseProject?.();
+  if (project) {
+    setState((s) => ({ projects: [project, ...s.projects.filter((p) => p.id !== project.id)] }));
+    await activateProject(project);
+  }
+}
+
+export async function deleteProject(location: string): Promise<void> {
+  await host.deleteProject(location);
+  setState((s) => ({ projects: s.projects.filter((p) => p.location !== location) }));
+  toast('Project deleted');
+}
+
+export async function refreshProjects(): Promise<void> {
+  setState({ projects: await host.listProjects() });
+}
+
+/* ---------------------------------------------------------------- files */
+
 export async function refreshTree(dir = ''): Promise<void> {
-  if (!getState().workspace) return;
-  const nodes = await api.readTree(dir);
+  if (!workspace) return;
+  const nodes = await workspace.list(dir);
   setState((s) => ({ tree: { ...s.tree, [dir]: nodes } }));
 }
 
@@ -160,23 +234,25 @@ export async function toggleDir(path: string): Promise<void> {
 }
 
 export async function openFile(path: string, view: 'editor' | 'diff' = 'editor'): Promise<void> {
-  const state = getState();
-  if (!state.files[path]) {
-    const file = await api.readFile(path);
+  const { project, files } = getState();
+  if (!project) return;
+
+  if (!files[path]) {
+    const meta = await host.readMeta(project, path);
     setState((s) => ({
       files: {
         ...s.files,
         [path]: {
-          content: file.content,
-          original: file.content,
-          language: file.language,
+          content: meta.content,
+          original: meta.content,
+          language: meta.language,
           dirty: false,
-          binary: file.binary,
-          truncated: file.truncated,
+          binary: meta.binary,
         },
       },
     }));
   }
+
   setState((s) => ({
     tabs: s.tabs.includes(path) ? s.tabs : [...s.tabs, path],
     active: path,
@@ -204,92 +280,162 @@ export function editFile(path: string, content: string): void {
 
 export async function saveActive(): Promise<void> {
   const { active, files } = getState();
-  if (!active) return;
+  if (!active || !workspace) return;
   const file = files[active];
-  if (!file || !file.dirty) return;
-  await api.saveFile(active, file.content);
+  if (!file?.dirty) return;
+  await workspace.write(active, file.content);
   setState((s) => ({ files: { ...s.files, [active]: { ...s.files[active], original: file.content, dirty: false } } }));
+  queueSync();
   toast(`Saved ${active}`);
 }
 
-export async function sendMessage(text: string, attachments: string[]): Promise<void> {
+/* ---------------------------------------------------------------- chat */
+
+export async function sendMessage(text: string, attachments: string[] = []): Promise<void> {
   const trimmed = text.trim();
   if (!trimmed) return;
-  const state = getState();
-  if (!state.workspace) {
-    toast('Open a project folder first.');
-    return;
+
+  let { project, settings } = getState();
+  if (!project) {
+    // Prompt-first: the very first message creates the project for you.
+    project = await newProject(projectNameFrom(trimmed));
+    settings = getState().settings;
   }
-  if (!state.hasApiKey) {
-    setState({ modal: 'key' });
-    return;
-  }
+  if (!workspace) return;
+
   pushChat({ kind: 'user', id: `u_${Date.now()}`, text: trimmed, attachments });
   setState({ busy: true });
-  await api.send(trimmed, attachments);
+  await agent.send(trimmed, attachments, workspace, settings, handleEvent);
 }
 
-export async function stopAgent(): Promise<void> {
-  await api.stop();
+/** Turn "make me a snake game" into "snake-game" for the folder name. */
+function projectNameFrom(prompt: string): string {
+  const stop = new Set([
+    'a', 'an', 'the', 'make', 'build', 'create', 'me', 'my', 'i', 'want', 'need', 'please',
+    'can', 'you', 'app', 'that', 'with', 'for', 'and', 'to', 'of', 'in', 'on', 'is', 'it',
+  ]);
+  const words = prompt
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w && !stop.has(w))
+    .slice(0, 4);
+  return words.length ? words.join('-') : 'new-project';
+}
+
+export function stopAgent(): void {
+  agent.stop();
   setState({ busy: false });
 }
 
-export async function approve(id: string, approved: boolean, always: boolean): Promise<void> {
-  await api.resolveApproval(id, approved, always);
-  patchChat(id, { resolved: approved } as any);
+export function approve(id: string, approved: boolean, always: boolean): void {
+  const item = getState().chat.find((c) => c.id === id);
+  const tool = item && item.kind === 'approval' ? item.tool : undefined;
+  agent.resolveApproval(id, approved, always, tool);
+  if (always && approved && tool) {
+    const settings = getState().settings;
+    if (!settings.alwaysAllow.includes(tool)) void updateSettings({ alwaysAllow: [...settings.alwaysAllow, tool] });
+  }
 }
 
-export async function newSession(): Promise<void> {
-  await api.newSession();
-  setState({ chat: [], todos: [], changes: [], usage: { input: 0, output: 0, cost: 0 }, output: '' });
-  toast('Started a fresh session');
+export function newSession(): void {
+  agent.reset();
+  setState({ chat: [], todos: [], changes: [], usage: { input: 0, output: 0, cost: 0 }, output: '', checkpoints: [] });
+  toast('Fresh session — the project files are untouched');
 }
+
+/* ---------------------------------------------------------------- settings */
 
 export async function updateSettings(patch: Partial<Settings>): Promise<void> {
-  const settings = await api.setSettings(patch);
+  const settings = await host.setSettings(patch);
   setState({ settings });
 }
 
-export async function chooseWorkspace(): Promise<void> {
-  const dir = await api.chooseWorkspace();
-  if (dir) {
-    setState({ workspace: dir, tree: {}, expanded: [], tabs: [], active: null, files: {} });
-    await refreshTree();
+export async function saveKey(provider: string, key: string): Promise<void> {
+  await host.setKey(provider, key);
+  keyCache[provider] = key;
+  setState({ configuredKeys: await host.configuredKeys(), modal: null, keyProvider: null });
+  toast(key ? 'Key saved' : 'Key removed');
+}
+
+/** Switching provider also snaps the model to one that provider actually has. */
+export async function chooseProvider(providerId: string): Promise<void> {
+  const provider = providerById(providerId);
+  const current = getState().settings.model;
+  const model = provider.models.some((m) => m.id === current) ? current : (provider.models[0]?.id ?? current);
+  await updateSettings({ provider: providerId, model });
+}
+
+/* ---------------------------------------------------------------- account */
+
+export async function signIn(fromAgent = false): Promise<boolean> {
+  try {
+    const account = await puterAuth.signIn();
+    if (!account) return false;
+    setState({ account });
+    if (!fromAgent) toast(`Signed in as ${account.username}`);
+    return true;
+  } catch {
+    if (!fromAgent) toast('Sign-in was cancelled');
+    return false;
   }
 }
 
-export async function openWorkspace(dir: string): Promise<void> {
-  const opened = await api.openWorkspace(dir);
-  if (opened) {
-    setState({ workspace: opened, tree: {}, expanded: [], tabs: [], active: null, files: {} });
-    await refreshTree();
-  }
+export function signOut(): void {
+  puterAuth.signOut();
+  setState({ account: null });
+  toast('Signed out. Your projects stay on this device.');
 }
 
-export async function refreshCheckpoints(): Promise<void> {
-  setState({ checkpoints: await api.checkpoints() });
+function queueSync(): void {
+  const { account, project } = getState();
+  if (!account || !project || !workspace) return;
+  setState({ syncing: true });
+  schedulePush(project, workspace, (ok) => {
+    setState({ syncing: false });
+    if (!ok) toast('Could not sync to your account.');
+  });
 }
+
+export async function syncNow(): Promise<void> {
+  const { account, project } = getState();
+  if (!account || !project || !workspace) {
+    toast('Sign in first to sync.');
+    return;
+  }
+  setState({ syncing: true });
+  const { pushProject } = await import('./sync');
+  const ok = await pushProject(project, workspace).catch(() => false);
+  setState({ syncing: false });
+  toast(ok ? 'Synced to your account' : 'Sync failed');
+}
+
+/* ---------------------------------------------------------------- history */
 
 export async function restoreCheckpoint(turnId: string): Promise<void> {
-  const count = await api.restore(turnId);
+  if (!workspace) return;
+  const count = await agent.checkpoints.restore(workspace, turnId);
   toast(`Rewound ${count} file${count === 1 ? '' : 's'}`);
-  setState({ modal: null, changes: [], files: {}, tabs: [], active: null });
+  setState({ modal: null, changes: [], files: {}, tabs: [], active: null, checkpoints: agent.checkpoints.list() });
   await refreshTree();
-  await refreshCheckpoints();
+  queueSync();
 }
 
 export async function revertChange(path: string, before: string | null): Promise<void> {
-  await api.revertFile(path, before);
+  if (!workspace) return;
+  if (before === null) await workspace.remove(path);
+  else await workspace.write(path, before);
   setState((s) => ({ changes: s.changes.filter((c) => c.path !== path), files: {}, tabs: s.tabs.filter((t) => t !== path) }));
   await refreshTree();
+  queueSync();
   toast(`Reverted ${path}`);
 }
 
-export async function startPreview(): Promise<void> {
-  const url = await api.startPreview();
-  if (!url) {
-    toast('Open a project folder first.');
-    return;
-  }
-  setState({ previewUrl: url, center: 'preview' });
+/* ---------------------------------------------------------------- preview */
+
+export async function openPreview(): Promise<void> {
+  const { project } = getState();
+  if (!project) return;
+  const preview = await host.preview(project);
+  setState({ preview, center: 'preview' });
 }

@@ -1,51 +1,38 @@
-/**
- * Types shared between the Electron main process, the preload bridge and the
- * renderer. Keep this file dependency-free — it is imported from all three.
- */
+/** Types shared by the core agent, the Electron host and the browser host. */
 
 export type ApprovalMode = 'autopilot' | 'ask';
-
-export type ModelId = string;
-
-export interface ModelInfo {
-  id: ModelId;
-  label: string;
-  blurb: string;
-  /** USD per million input / output tokens. */
-  inputPrice: number;
-  outputPrice: number;
-}
-
-/** Effort levels accepted by `output_config.effort`. */
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface Settings {
-  model: ModelId;
+  /** Provider id from src/core/providers.ts. */
+  provider: string;
+  model: string;
   effort: Effort;
   approvalMode: ApprovalMode;
   showThinking: boolean;
   maxTokens: number;
-  /** Extra guidance appended to the system prompt. */
   customInstructions: string;
-  /** Tool names the user chose to always allow without a prompt. */
   alwaysAllow: string[];
-  /** Ask the API to retry policy-declined requests on a fallback model. */
-  serverFallbacks: boolean;
+  /** Full chat-completions URL for the "Custom endpoint" provider. */
+  customEndpoint: string;
 }
 
-export interface AppState {
-  workspace: string | null;
-  hasApiKey: boolean;
-  settings: Settings;
-  recentWorkspaces: string[];
-}
+export const DEFAULT_SETTINGS: Settings = {
+  provider: 'puter',
+  model: 'gpt-5-nano',
+  effort: 'high',
+  approvalMode: 'autopilot',
+  showThinking: true,
+  maxTokens: 32000,
+  customInstructions: '',
+  alwaysAllow: [],
+  customEndpoint: '',
+};
 
 export interface FileNode {
   name: string;
-  path: string; // workspace-relative, posix separators
+  path: string;
   dir: boolean;
-  /** Populated lazily for directories. */
-  children?: FileNode[];
 }
 
 export interface FileContent {
@@ -79,7 +66,22 @@ export interface FileChange {
   removed: number;
 }
 
-/** Events streamed from the agent loop in main → renderer. */
+export interface CheckpointInfo {
+  turnId: string;
+  label: string;
+  at: number;
+  files: number;
+}
+
+/** A project the user can open. In the browser these live in OPFS. */
+export interface ProjectInfo {
+  id: string;
+  name: string;
+  /** Absolute path on disk, or the OPFS folder name in the browser. */
+  location: string;
+  updatedAt: number;
+}
+
 export type AgentEvent =
   | { type: 'turn_start'; turnId: string }
   | { type: 'block_start'; kind: 'thinking' | 'text'; id: string }
@@ -94,91 +96,53 @@ export type AgentEvent =
   | { type: 'usage'; delta: UsageDelta }
   | { type: 'command_output'; id: string; chunk: string }
   | { type: 'notice'; level: 'info' | 'warn' | 'error'; message: string }
+  | { type: 'need_key'; provider: string }
   | { type: 'turn_end'; turnId: string; stopReason: string | null }
   | { type: 'idle' };
 
-export interface CheckpointInfo {
-  turnId: string;
-  label: string;
-  at: number;
-  files: number;
-}
+/**
+ * What the desktop host exposes to the renderer. The browser build implements
+ * the same shape on top of OPFS and direct fetch, so the UI is identical.
+ */
+export interface DesktopBridge {
+  isDesktop: true;
+  platform: string;
 
-/** The API surface exposed on `window.mc` by the preload script. */
-export interface Bridge {
-  getState(): Promise<AppState>;
+  listProjects(): Promise<ProjectInfo[]>;
+  createProject(name: string): Promise<ProjectInfo>;
+  chooseProject(): Promise<ProjectInfo | null>;
+  openProject(location: string): Promise<ProjectInfo | null>;
+  currentProject(): Promise<ProjectInfo | null>;
+
+  list(dir: string): Promise<FileNode[]>;
+  read(path: string): Promise<string | null>;
+  readMeta(path: string): Promise<FileContent>;
+  write(path: string, content: string): Promise<void>;
+  remove(path: string): Promise<void>;
+  exists(path: string): Promise<boolean>;
+  walk(): Promise<string[]>;
+  reveal(path: string): Promise<void>;
+
+  run(command: string): Promise<{ id: string; code: number | null; output: string; timedOut: boolean }>;
+  onCommandChunk(cb: (chunk: string) => void): () => void;
+
+  netRequest(
+    url: string,
+    init: { method: string; headers: Record<string, string>; body: string },
+  ): Promise<{ requestId: string; status: number; ok: boolean }>;
+  onNetChunk(cb: (requestId: string, chunk: string | null) => void): () => void;
+  netAbort(requestId: string): void;
+
+  getSettings(): Promise<Settings>;
   setSettings(patch: Partial<Settings>): Promise<Settings>;
-  setApiKey(key: string): Promise<boolean>;
-  clearApiKey(): Promise<void>;
-
-  chooseWorkspace(): Promise<string | null>;
-  openWorkspace(path: string): Promise<string | null>;
-  readTree(dir?: string): Promise<FileNode[]>;
-  readFile(path: string): Promise<FileContent>;
-  saveFile(path: string, content: string): Promise<void>;
-  createEntry(path: string, dir: boolean): Promise<void>;
-  deleteEntry(path: string): Promise<void>;
-  revealInExplorer(path: string): Promise<void>;
-
-  send(text: string, attachments: string[]): Promise<void>;
-  stop(): Promise<void>;
-  resolveApproval(id: string, approved: boolean, always: boolean): Promise<void>;
-  newSession(): Promise<void>;
-
-  checkpoints(): Promise<CheckpointInfo[]>;
-  restore(turnId: string): Promise<number>;
-  revertFile(path: string, content: string | null): Promise<void>;
+  getKey(provider: string): Promise<string>;
+  setKey(provider: string, key: string): Promise<void>;
+  listKeys(): Promise<string[]>;
 
   startPreview(): Promise<string | null>;
-  stopPreview(): Promise<void>;
   openExternal(url: string): Promise<void>;
 
   minimize(): void;
   toggleMaximize(): void;
   close(): void;
-
-  onEvent(cb: (e: AgentEvent) => void): () => void;
-  onWorkspaceChanged(cb: (path: string | null) => void): () => void;
 }
-
-export const MODELS: ModelInfo[] = [
-  {
-    id: 'claude-opus-5',
-    label: 'Opus 5',
-    blurb: 'Best for complex agentic coding. The default.',
-    inputPrice: 5,
-    outputPrice: 25,
-  },
-  {
-    id: 'claude-sonnet-5',
-    label: 'Sonnet 5',
-    blurb: 'Near-Opus quality, faster and cheaper.',
-    inputPrice: 3,
-    outputPrice: 15,
-  },
-  {
-    id: 'claude-opus-4-8',
-    label: 'Opus 4.8',
-    blurb: 'Previous-generation Opus. Very capable.',
-    inputPrice: 5,
-    outputPrice: 25,
-  },
-  {
-    id: 'claude-haiku-4-5',
-    label: 'Haiku 4.5',
-    blurb: 'Fastest and cheapest. Good for small edits.',
-    inputPrice: 1,
-    outputPrice: 5,
-  },
-];
-
-export const DEFAULT_SETTINGS: Settings = {
-  model: 'claude-opus-5',
-  effort: 'high',
-  approvalMode: 'ask',
-  showThinking: true,
-  maxTokens: 32000,
-  customInstructions: '',
-  alwaysAllow: [],
-  serverFallbacks: true,
-};

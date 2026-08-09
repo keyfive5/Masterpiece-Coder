@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { providerById } from '../core/providers';
 import { boot, saveActive } from './actions';
+import { isWeb } from './host';
 import { setState, useStore } from './store';
-import { isDemo } from './api';
 import { TitleBar } from './components/TitleBar';
 import { Explorer } from './components/Explorer';
 import { EditorPane } from './components/EditorPane';
 import { Chat } from './components/Chat';
 import { Modals } from './components/Modals';
-import { Welcome } from './components/Welcome';
+import { Launcher } from './components/Launcher';
 
 /** Drag handle between two panes; writes a CSS custom property on the grid. */
 function Resizer({
@@ -31,11 +32,11 @@ function Resizer({
   useEffect(() => {
     if (!dragging) return;
     const move = (e: MouseEvent) => {
-      const host = frame.current?.parentElement;
-      if (!host) return;
-      const rect = host.getBoundingClientRect();
+      const grid = frame.current?.parentElement;
+      if (!grid) return;
+      const rect = grid.getBoundingClientRect();
       const raw = invert ? rect.right - e.clientX : e.clientX - rect.left;
-      host.style.setProperty(varName, `${Math.max(min, Math.min(max, raw))}px`);
+      grid.style.setProperty(varName, `${Math.max(min, Math.min(max, raw))}px`);
     };
     const up = () => setDragging(false);
     window.addEventListener('mousemove', move);
@@ -65,35 +66,36 @@ function Resizer({
 }
 
 function StatusBar() {
-  const workspace = useStore((s) => s.workspace);
+  const project = useStore((s) => s.project);
   const busy = useStore((s) => s.busy);
   const usage = useStore((s) => s.usage);
   const settings = useStore((s) => s.settings);
+  const account = useStore((s) => s.account);
   const active = useStore((s) => s.active);
   const changes = useStore((s) => s.changes.length);
+
+  const provider = providerById(settings.provider);
 
   return (
     <div className="status">
       <span className={busy ? 'live' : ''}>{busy ? '● working' : '○ idle'}</span>
       <b>{settings.model}</b>
-      <span>effort: {settings.effort}</span>
+      <span>{provider.free ? 'free' : provider.label.toLowerCase()}</span>
       <span>{settings.approvalMode === 'autopilot' ? 'autopilot' : 'ask first'}</span>
       <div className="grow" />
       {active && <span>{active}</span>}
       {changes > 0 && <span>{changes} changed</span>}
-      {usage.input + usage.output > 0 && (
-        <span>
-          {(usage.input / 1000).toFixed(1)}k in · {(usage.output / 1000).toFixed(1)}k out · ${usage.cost.toFixed(3)}
-        </span>
-      )}
-      <span title={workspace ?? ''}>{workspace ?? 'no folder'}</span>
+      {usage.cost > 0 && <span>${usage.cost.toFixed(3)}</span>}
+      {account && <span>☁ {account.username}</span>}
+      <span>{isWeb ? 'web' : 'desktop'}</span>
+      {project && <span title={project.location}>{project.name}</span>}
     </div>
   );
 }
 
 export function App() {
   const ready = useStore((s) => s.ready);
-  const workspace = useStore((s) => s.workspace);
+  const project = useStore((s) => s.project);
   const toast = useStore((s) => s.toast);
 
   useEffect(() => {
@@ -110,7 +112,7 @@ export function App() {
         e.preventDefault();
         setState({ modal: 'settings' });
       }
-      if (e.key === 'Escape') setState({ modal: null });
+      if (e.key === 'Escape') setState({ modal: null, keyProvider: null });
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -119,10 +121,10 @@ export function App() {
   if (!ready) return null;
 
   return (
-    <div className="app">
+    <div className={`app${isWeb ? ' web' : ''}`}>
       <TitleBar />
 
-      {workspace ? (
+      {project ? (
         <div className="body" style={{ position: 'relative' }}>
           <Explorer />
           <EditorPane />
@@ -131,30 +133,12 @@ export function App() {
           <Resizer varName="--chat" fallback={430} min={320} max={720} side="right" invert />
         </div>
       ) : (
-        <Welcome />
+        <Launcher />
       )}
 
       <StatusBar />
       <Modals />
       {toast && <div className="toast">{toast}</div>}
-      {isDemo && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 48,
-            right: 14,
-            zIndex: 90,
-            padding: '5px 11px',
-            borderRadius: 999,
-            background: 'rgba(124,140,255,0.16)',
-            border: '1px solid rgba(124,140,255,0.4)',
-            fontSize: 11.5,
-            color: '#c3caff',
-          }}
-        >
-          Demo mode — scripted run, no API key used
-        </div>
-      )}
     </div>
   );
 }

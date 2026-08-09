@@ -106,5 +106,6 @@ export const External = svg(
     <path d="M19 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5" />
   </>,
 );
+export const Cloud = svg(<path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.1 11.1 3.5 3.5 0 0 0 6.5 19z" />);
 export const Minus = svg(<path d="M5 12h14" />);
 export const Square = svg(<rect x="5" y="5" width="14" height="14" rx="2" />);

@@ -1,10 +1,10 @@
 import { useSyncExternalStore } from 'react';
 import {
-  AppState,
   CheckpointInfo,
   DEFAULT_SETTINGS,
   FileChange,
   FileNode,
+  ProjectInfo,
   Settings,
   TodoItem,
   ToolStatus,
@@ -16,8 +16,7 @@ export type ChatItem =
   | { kind: 'text'; id: string; text: string; done: boolean }
   | { kind: 'tool'; id: string; name: string; input: any; status: ToolStatus; summary: string; detail?: string }
   | { kind: 'approval'; id: string; tool: string; title: string; detail: string; resolved: null | boolean }
-  | { kind: 'notice'; id: string; level: 'info' | 'warn' | 'error'; message: string }
-  | { kind: 'turn'; id: string; label: string };
+  | { kind: 'notice'; id: string; level: 'info' | 'warn' | 'error'; message: string };
 
 export interface OpenFile {
   content: string;
@@ -25,17 +24,20 @@ export interface OpenFile {
   language: string;
   dirty: boolean;
   binary: boolean;
-  truncated: boolean;
 }
 
 export type CenterView = 'editor' | 'diff' | 'preview';
 
 export interface UIState {
   ready: boolean;
-  workspace: string | null;
-  hasApiKey: boolean;
+  project: ProjectInfo | null;
+  projects: ProjectInfo[];
   settings: Settings;
-  recent: string[];
+  configuredKeys: string[];
+
+  /** Puter account, used for free AI and for syncing projects. */
+  account: { username: string } | null;
+  syncing: boolean;
 
   tree: Record<string, FileNode[]>;
   expanded: string[];
@@ -47,28 +49,32 @@ export interface UIState {
   todos: TodoItem[];
   changes: FileChange[];
   busy: boolean;
-  turnId: string | null;
 
   usage: { input: number; output: number; cost: number };
 
   center: CenterView;
   diffPath: string | null;
-  previewUrl: string | null;
+  preview: { url?: string; srcdoc?: string; error?: string } | null;
 
   output: string;
   outputOpen: boolean;
 
-  modal: null | 'settings' | 'history' | 'key';
+  modal: null | 'settings' | 'history' | 'key' | 'projects';
+  /** Which provider the key modal is collecting for. */
+  keyProvider: string | null;
   checkpoints: CheckpointInfo[];
   toast: string | null;
 }
 
 const initial: UIState = {
   ready: false,
-  workspace: null,
-  hasApiKey: false,
+  project: null,
+  projects: [],
   settings: DEFAULT_SETTINGS,
-  recent: [],
+  configuredKeys: [],
+
+  account: null,
+  syncing: false,
 
   tree: {},
   expanded: [],
@@ -80,18 +86,18 @@ const initial: UIState = {
   todos: [],
   changes: [],
   busy: false,
-  turnId: null,
 
   usage: { input: 0, output: 0, cost: 0 },
 
   center: 'editor',
   diffPath: null,
-  previewUrl: null,
+  preview: null,
 
   output: '',
   outputOpen: false,
 
   modal: null,
+  keyProvider: null,
   checkpoints: [],
   toast: null,
 };
@@ -99,13 +105,14 @@ const initial: UIState = {
 let state = initial;
 const listeners = new Set<() => void>();
 
+export const EMPTY_NODES: FileNode[] = [];
+
 export function getState(): UIState {
   return state;
 }
 
 export function setState(patch: Partial<UIState> | ((s: UIState) => Partial<UIState>)): void {
-  const next = typeof patch === 'function' ? patch(state) : patch;
-  state = { ...state, ...next };
+  state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) };
   for (const listener of listeners) listener();
 }
 
@@ -122,28 +129,18 @@ export function useStore<T>(select: (s: UIState) => T): T {
   );
 }
 
-export function applyAppState(app: AppState): void {
-  setState({
-    ready: true,
-    workspace: app.workspace,
-    hasApiKey: app.hasApiKey,
-    settings: app.settings,
-    recent: app.recentWorkspaces,
-  });
-}
-
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 export function toast(message: string): void {
   setState({ toast: message });
   if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => setState({ toast: null }), 3200);
+  toastTimer = setTimeout(() => setState({ toast: null }), 3400);
 }
 
 export function pushChat(item: ChatItem): void {
   setState((s) => ({ chat: [...s.chat, item] }));
 }
 
-export function patchChat(id: string, patch: Partial<ChatItem>): void {
+export function patchChat(id: string, patch: Record<string, unknown>): void {
   setState((s) => ({
     chat: s.chat.map((item) => (item.id === id ? ({ ...item, ...patch } as ChatItem) : item)),
   }));

@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { EDITOR_OPTIONS, monaco } from '../monaco';
-import { closeTab, editFile, openFile, saveActive, startPreview } from '../actions';
+import { closeTab, editFile, openFile, openPreview, saveActive } from '../actions';
 import { setState, useStore } from '../store';
-import { api } from '../api';
+import { host } from '../host';
 import { DiffView } from './DiffView';
 import { Code, Diff, External, Eye, Refresh, Save, Terminal, X } from './Icons';
 
@@ -109,17 +109,17 @@ function CodeEditor({ visible }: { visible: boolean }) {
 }
 
 function PreviewPane() {
-  const url = useStore((s) => s.previewUrl);
+  const preview = useStore((s) => s.preview);
   const frame = useRef<HTMLIFrameElement>(null);
 
-  if (!url) {
+  if (!preview || preview.error) {
     return (
       <div className="empty">
         <div>
           <h3>Preview</h3>
-          <p>Serves this project folder over http so you can see it running. Press the button to start.</p>
-          <button className="btn primary" style={{ marginTop: 14 }} onClick={startPreview}>
-            <Eye size={13} /> Start preview
+          <p>{preview?.error ?? 'Shows the project running. Press the button to build it.'}</p>
+          <button className="btn primary" style={{ marginTop: 14 }} onClick={() => void openPreview()}>
+            <Eye size={13} /> {preview?.error ? 'Try again' : 'Start preview'}
           </button>
         </div>
       </div>
@@ -129,21 +129,24 @@ function PreviewPane() {
   return (
     <>
       <div className="diff-head">
-        <span className="path">{url}</span>
+        <span className="path">{preview.url ?? 'Live preview'}</span>
         <div style={{ flex: 1 }} />
-        <button
-          className="btn tiny"
-          onClick={() => {
-            if (frame.current) frame.current.src = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
-          }}
-        >
+        <button className="btn tiny" onClick={() => void openPreview()}>
           <Refresh size={12} /> Reload
         </button>
-        <button className="btn tiny" onClick={() => api.openExternal(url)}>
-          <External size={12} /> Browser
-        </button>
+        {preview.url && (
+          <button className="btn tiny" onClick={() => host.openExternal(preview.url!)}>
+            <External size={12} /> Browser
+          </button>
+        )}
       </div>
-      <iframe ref={frame} className="preview-frame" src={url} title="Project preview" />
+      <iframe
+        ref={frame}
+        className="preview-frame"
+        {...(preview.url ? { src: preview.url } : { srcDoc: preview.srcdoc })}
+        sandbox="allow-scripts allow-modals allow-forms allow-popups"
+        title="Project preview"
+      />
     </>
   );
 }
@@ -223,7 +226,7 @@ export function EditorPane() {
             <button className={center === 'diff' ? 'on' : ''} onClick={() => setState({ center: 'diff' })}>
               <Diff size={11} /> Diff{changeCount > 0 ? ` ${changeCount}` : ''}
             </button>
-            <button className={center === 'preview' ? 'on' : ''} onClick={startPreview}>
+            <button className={center === 'preview' ? 'on' : ''} onClick={() => void openPreview()}>
               <Eye size={11} /> Preview
             </button>
           </div>

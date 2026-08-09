@@ -995,6 +995,207 @@ select {
   color: var(--accent-2);
 }
 
+/* ---------------------------------------------------------------- launcher */
+
+.app.web .titlebar {
+  -webkit-app-region: none;
+}
+
+.launcher {
+  height: 100%;
+  overflow: auto;
+  display: grid;
+  place-items: center;
+  padding: 40px 28px 60px;
+}
+
+.launcher-inner {
+  width: min(680px, 100%);
+  text-align: center;
+}
+
+.launcher-mark {
+  width: 54px;
+  height: 54px;
+  margin: 0 auto 20px;
+  border-radius: 17px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 60px var(--accent-glow);
+  position: relative;
+  animation: breathe 5s ease-in-out infinite;
+}
+.launcher-mark::after {
+  content: '';
+  position: absolute;
+  inset: 14px;
+  border-radius: 6px;
+  background: #0a0d13;
+}
+@keyframes breathe {
+  0%, 100% {
+    box-shadow: 0 0 50px var(--accent-glow);
+  }
+  50% {
+    box-shadow: 0 0 78px rgba(124, 140, 255, 0.42);
+  }
+}
+
+.launcher h1 {
+  margin: 0 0 9px;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  background: linear-gradient(120deg, #fff 15%, var(--accent) 60%, var(--accent-2) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.launcher .lead {
+  margin: 0 0 24px;
+  color: var(--dim);
+  font-size: 14.5px;
+}
+
+.launcher-box {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.42);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+  text-align: left;
+}
+.launcher-box:focus-within {
+  border-color: rgba(124, 140, 255, 0.6);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.42), 0 0 0 4px rgba(124, 140, 255, 0.11);
+}
+.launcher-box textarea {
+  width: 100%;
+  min-height: 62px;
+  max-height: 200px;
+  padding: 16px 18px 8px;
+  background: none;
+  border: none;
+  outline: none;
+  resize: none;
+  font-size: 15.5px;
+  line-height: 1.55;
+}
+.launcher-box textarea::placeholder {
+  color: var(--faint);
+}
+.launcher-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 10px 12px;
+}
+
+.chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--dim);
+  font-size: 11.8px;
+  font-weight: 550;
+  transition: border-color 140ms ease, color 140ms ease;
+}
+.chip-btn:hover {
+  border-color: rgba(124, 140, 255, 0.5);
+  color: var(--text);
+}
+.chip-sub {
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+.launcher-note {
+  margin: 14px auto 0;
+  max-width: 520px;
+  font-size: 12.3px;
+  color: var(--faint);
+  line-height: 1.6;
+}
+.launcher-note b {
+  color: var(--dim);
+  font-weight: 600;
+}
+
+.ideas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: center;
+  margin-top: 22px;
+}
+.idea {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--dim);
+  font-size: 12.2px;
+  transition: border-color 140ms ease, color 140ms ease, transform 110ms ease;
+}
+.idea:hover {
+  border-color: rgba(72, 216, 230, 0.5);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.launcher-recent {
+  margin-top: 34px;
+  text-align: left;
+  display: grid;
+  gap: 8px;
+}
+.launcher-recent-head {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--faint);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  color: var(--faint);
+  vertical-align: 1px;
+}
+.tag.free {
+  border-color: rgba(74, 222, 128, 0.45);
+  color: var(--green);
+}
+.tag.ok {
+  border-color: rgba(72, 216, 230, 0.45);
+  color: var(--accent-2);
+}
+
+.opt .s.dim {
+  color: #5f6879;
+  margin-top: 5px;
+}
+
+.btn.ghost.on {
+  color: var(--accent-2);
+}
+
 /* ---------------------------------------------------------------- welcome */
 
 .welcome {
