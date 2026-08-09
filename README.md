@@ -184,6 +184,12 @@ own — Gemini's free tier costs nothing, Claude costs money — will do better.
 History, and it can only touch the project folder, but if you would rather approve each step,
 flip to *Ask first* in the composer.
 
+## Picking this up again
+
+- [`PROJECT-STATE.md`](PROJECT-STATE.md) — where the project stands: what works,
+  what's verified, what's still open.
+- [`CLAUDE.md`](CLAUDE.md) — how it's built and the traps worth knowing.
+
 ---
 
 Built with Electron, React, Monaco, and whichever model you point it at.

@@ -3,6 +3,11 @@
 Read this before touching anything. It is the accumulated context of the build,
 including several things that cost real debugging time to learn.
 
+**For where the project currently stands** — what is done, what is verified,
+what is still open — read [`PROJECT-STATE.md`](PROJECT-STATE.md) first. This
+file is the engineering companion to it: how the thing is put together and how
+not to waste a day.
+
 ## What this is
 
 Hasan's own Claude Code / Cursor. He loves both but **never uses their
