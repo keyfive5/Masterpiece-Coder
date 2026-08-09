@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChatItem, setState, useStore } from '../store';
-import { approve, openFile } from '../actions';
+import { approve, openFile, stopAgent } from '../actions';
 import { Markdown } from './Markdown';
 import { Composer } from './Composer';
 import { Brain, Check, Chevron, Sparkle, X } from './Icons';
@@ -188,6 +188,35 @@ function Item({ item }: { item: ChatItem }) {
   }
 }
 
+/**
+ * Always visible while the agent runs. Without it the app looks frozen during
+ * the first request, which can easily take ten seconds on a free model.
+ */
+function ActivityStrip() {
+  const activity = useStore((s) => s.activity);
+  const startedAt = useStore((s) => s.startedAt);
+  const [, tick] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const seconds = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0;
+
+  return (
+    <div className="activity">
+      <div className="spin" />
+      <span className="shimmer">{activity || 'Working'}</span>
+      <div style={{ flex: 1 }} />
+      <span className="activity-time">{seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`}</span>
+      <button className="btn tiny danger" onClick={stopAgent}>
+        Stop
+      </button>
+    </div>
+  );
+}
+
 function Empty() {
   const project = useStore((s) => s.project);
   return (
@@ -241,11 +270,7 @@ export function Chat() {
         }}
       >
         {chat.length === 0 ? <Empty /> : chat.map((item) => <Item key={item.id} item={item} />)}
-        {busy && chat.length > 0 && chat[chat.length - 1].kind === 'tool' && (
-          <div style={{ color: 'var(--faint)', fontSize: 12, paddingLeft: 4 }}>
-            <span className="shimmer">Working…</span>
-          </div>
-        )}
+        {busy && <ActivityStrip />}
       </div>
 
       <Plan />

@@ -3,7 +3,7 @@ import { providerById } from '../../core/providers';
 import { newSession, signIn, signOut, syncNow } from '../actions';
 import { host, isWeb } from '../host';
 import { setState, useStore } from '../store';
-import { Cloud, Folder, Gear, History, Minus, Plus, Square, X } from './Icons';
+import { Cloud, Folder, Gear, Github, History, Minus, Plus, Square, X } from './Icons';
 
 export function TitleBar() {
   const project = useStore((s) => s.project);
@@ -60,6 +60,14 @@ export function TitleBar() {
 
       <button className="btn ghost" onClick={newSession} disabled={busy} title="Clear the conversation, keep the files">
         <Plus size={13} /> New chat
+      </button>
+
+      <button
+        className="btn ghost"
+        onClick={() => setState({ modal: 'github' })}
+        title="Save this project to GitHub, or pull a repo into it"
+      >
+        <Github size={13} />
       </button>
 
       <button className="btn ghost" onClick={() => setState({ modal: 'history' })} title="Rewind changes">

@@ -57,10 +57,13 @@ export const PROVIDERS: ProviderDef[] = [
     browserOk: true,
     allowCustomModel: true,
     note: 'Usage runs through your free Puter account, which also syncs your projects across the web app and the desktop app.',
+    // Ordered strongest-at-tool-use first: this agent lives or dies on the model
+    // actually calling write_file instead of describing code in prose.
     models: [
-      { id: 'gpt-5-nano', label: 'GPT-5 nano', blurb: 'Fast and light. A good default.' },
-      { id: 'gpt-5', label: 'GPT-5', blurb: 'Stronger reasoning for bigger builds.' },
-      { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', blurb: 'Excellent at code.' },
+      { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', blurb: 'Best at building things. The default.' },
+      { id: 'gpt-5', label: 'GPT-5', blurb: 'Strong all-rounder.' },
+      { id: 'gpt-4.1', label: 'GPT-4.1', blurb: 'Reliable and quick.' },
+      { id: 'gpt-5-nano', label: 'GPT-5 nano', blurb: 'Fastest, but often too weak to finish a build.' },
       { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite', blurb: 'Very fast.' },
     ],
   },
@@ -561,83 +564,126 @@ export const puterAuth = {
   },
 };
 
+/**
+ * Pull tool calls out of whichever shape came back.
+ *
+ * Puter is a gateway, so the shape follows the *upstream* vendor, not Puter:
+ * GPT models answer in OpenAI form (`message.tool_calls`), while Claude models
+ * answer in Anthropic form (`message.content` as an array of blocks, one of
+ * which is `{type:'tool_use', name, input}`). Verified against both.
+ */
+function extractToolCalls(source: any): ToolCall[] {
+  const message = source?.message ?? source?.choices?.[0]?.message ?? source;
+  const out: ToolCall[] = [];
+
+  // OpenAI form.
+  const lists = [message?.tool_calls, source?.tool_calls, source?.choices?.[0]?.message?.tool_calls];
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue;
+    for (const call of list) {
+      const name = call?.function?.name ?? call?.name;
+      if (!name) continue;
+      const rawArgs = call?.function?.arguments ?? call?.arguments ?? call?.input;
+      let input: Record<string, unknown> = {};
+      try {
+        input = typeof rawArgs === 'string' ? JSON.parse(rawArgs || '{}') : (rawArgs ?? {});
+      } catch {
+        input = {};
+      }
+      out.push({ id: call?.id ?? `call_${out.length}_${Date.now()}`, name, input });
+    }
+    if (out.length) return out;
+  }
+
+  // Anthropic form.
+  const blocks = Array.isArray(message?.content) ? message.content : Array.isArray(source?.content) ? source.content : null;
+  for (const block of blocks ?? []) {
+    if (block?.type !== 'tool_use' || !block?.name) continue;
+    out.push({
+      id: block.id ?? `call_${out.length}_${Date.now()}`,
+      name: block.name,
+      input: (block.input ?? {}) as Record<string, unknown>,
+    });
+  }
+  return out;
+}
+
+/** Pull assistant text out of whichever shape came back. */
+function extractText(source: any): string {
+  const message = source?.message ?? source?.choices?.[0]?.message ?? source;
+  if (typeof message === 'string') return message;
+
+  const content = message?.content ?? source?.text ?? '';
+  if (Array.isArray(content)) {
+    // Anthropic blocks: keep the text ones, drop tool_use.
+    return content
+      .filter((block: any) => block?.type === 'text' || typeof block?.text === 'string')
+      .map((block: any) => block?.text ?? '')
+      .join('');
+  }
+  return typeof content === 'string' ? content : '';
+}
+
 async function runPuter(request: TurnRequest, handlers: TurnHandlers): Promise<TurnResult> {
   if (!(await loadPuter())) {
     throw new ProviderError('Could not load the free AI service. Check your internet connection.', null, true);
   }
   const puter = (window as any).puter;
-  if (!puterAuth.isSignedIn()) {
-    throw new ProviderError('__PUTER_SIGNIN__', 401);
-  }
+  if (!puterAuth.isSignedIn()) throw new ProviderError('__PUTER_SIGNIN__', 401);
 
-  // Puter takes an OpenAI-shaped conversation, so reuse that mapping.
   const messages = openaiMessages(request.system, request.messages);
+  const wantsTools = request.tools.length > 0;
   const options: Record<string, unknown> = { model: request.model };
-  if (request.tools.length) options.tools = openaiTools(request.tools);
+  if (wantsTools) options.tools = openaiTools(request.tools);
 
-  let text = '';
-  const calls = new ToolCallAccumulator();
-  const direct: ToolCall[] = [];
-
-  const absorbComplete = (list: any[] | undefined) => {
-    for (const call of list ?? []) {
-      if (!call?.function?.name) continue;
-      let input: Record<string, unknown> = {};
-      try {
-        input =
-          typeof call.function.arguments === 'string'
-            ? JSON.parse(call.function.arguments || '{}')
-            : (call.function.arguments ?? {});
-      } catch {
-        input = {};
-      }
-      direct.push({ id: call.id ?? `call_${direct.length}_${Date.now()}`, name: call.function.name, input });
-    }
-  };
-
-  // Stream when we can; fall back to a single response if the stream yields nothing.
-  let streamed = false;
-  try {
-    const stream = await puter.ai.chat(messages, { ...options, stream: true });
-    if (stream && typeof stream[Symbol.asyncIterator] === 'function') {
-      for await (const part of stream) {
-        if (request.signal.aborted) break;
-        streamed = true;
-        const chunk = part?.text ?? part?.delta?.content ?? part?.message?.content;
-        if (typeof chunk === 'string' && chunk) {
-          text += chunk;
-          handlers.onText(chunk);
+  /*
+   * Deliberately NOT streaming when tools are in play. Puter surfaces
+   * `tool_calls` reliably on a completed response but not on stream parts, so
+   * streaming silently swallowed every tool call the model made after writing
+   * a sentence — the loop then saw "no tools" and stopped after one step.
+   * Correctness beats token-by-token output here; the activity strip in the UI
+   * covers the wait.
+   */
+  if (!wantsTools) {
+    try {
+      const stream = await puter.ai.chat(messages, { ...options, stream: true });
+      if (stream && typeof stream[Symbol.asyncIterator] === 'function') {
+        let text = '';
+        for await (const part of stream) {
+          if (request.signal.aborted) break;
+          const chunk = part?.text ?? part?.delta?.content;
+          if (typeof chunk === 'string' && chunk) {
+            text += chunk;
+            handlers.onText(chunk);
+          }
         }
-        const deltaCalls = part?.delta?.tool_calls;
-        if (deltaCalls) calls.absorb(deltaCalls, handlers.onToolPending);
-        absorbComplete(part?.tool_calls ?? part?.message?.tool_calls);
+        if (text) {
+          return { text, thinking: '', toolCalls: [], native: null, usage: { ...EMPTY_USAGE }, stopReason: 'end_turn' };
+        }
       }
+    } catch {
+      /* fall through to the non-streaming call below */
     }
-  } catch (err) {
-    const message = String((err as Error)?.message ?? err);
-    if (/sign|auth|login/i.test(message)) throw new ProviderError('__PUTER_SIGNIN__', 401);
-    handlers.onNotice?.('Streaming was unavailable, so this reply arrives all at once.');
-    streamed = false;
   }
 
-  let toolCalls = [...direct, ...calls.finish()];
-
-  if (!streamed || (!text && toolCalls.length === 0)) {
-    const response = await puter.ai.chat(messages, options).catch((err: any) => {
-      const message = String(err?.message ?? err);
-      if (/sign|auth|login|credit/i.test(message)) throw new ProviderError('__PUTER_SIGNIN__', 401);
-      throw new ProviderError(`The free AI service failed: ${message}`, null, true);
-    });
-    const message = response?.message ?? response;
-    const content = typeof message === 'string' ? message : (message?.content ?? response?.text ?? '');
-    const body = Array.isArray(content) ? content.map((c: any) => c?.text ?? '').join('') : String(content ?? '');
-    if (body && !text) {
-      text = body;
-      handlers.onText(body);
+  const response = await puter.ai.chat(messages, options).catch((err: any) => {
+    const message = String(err?.message ?? err);
+    if (/sign|auth|login|not.*logged/i.test(message)) throw new ProviderError('__PUTER_SIGNIN__', 401);
+    if (/model|not.*(found|support|available)/i.test(message)) {
+      throw new ProviderError(`__PUTER_MODEL__${message}`, 404);
     }
-    direct.length = 0;
-    absorbComplete(message?.tool_calls);
-    toolCalls = direct;
+    throw new ProviderError(`The free AI service failed: ${message}`, null, true);
+  });
+
+  const text = extractText(response);
+  const toolCalls = extractToolCalls(response);
+  if (text) handlers.onText(text);
+
+  const usage: TurnUsage = { ...EMPTY_USAGE };
+  const reported = response?.usage;
+  if (reported) {
+    usage.input = reported.prompt_tokens ?? reported.input_tokens ?? 0;
+    usage.output = reported.completion_tokens ?? reported.output_tokens ?? 0;
   }
 
   return {
@@ -645,7 +691,7 @@ async function runPuter(request: TurnRequest, handlers: TurnHandlers): Promise<T
     thinking: '',
     toolCalls,
     native: null,
-    usage: { ...EMPTY_USAGE },
+    usage,
     stopReason: toolCalls.length ? 'tool_use' : 'end_turn',
   };
 }

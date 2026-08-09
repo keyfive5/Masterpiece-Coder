@@ -107,5 +107,22 @@ export const External = svg(
   </>,
 );
 export const Cloud = svg(<path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.1 11.1 3.5 3.5 0 0 0 6.5 19z" />);
+export const Download = svg(
+  <>
+    <path d="M12 3v12" />
+    <path d="M7 11l5 5 5-5" />
+    <path d="M4 21h16" />
+  </>,
+);
+export const Upload = svg(
+  <>
+    <path d="M12 17V5" />
+    <path d="M7 9l5-5 5 5" />
+    <path d="M4 21h16" />
+  </>,
+);
+export const Github = svg(
+  <path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12 12 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21" />,
+);
 export const Minus = svg(<path d="M5 12h14" />);
 export const Square = svg(<rect x="5" y="5" width="14" height="14" rx="2" />);

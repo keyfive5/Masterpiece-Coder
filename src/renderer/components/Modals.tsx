@@ -1,13 +1,19 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { PROVIDERS, providerById } from '../../core/providers';
 import { Effort } from '../../shared/types';
 import {
   chooseProjectFolder,
   chooseProvider,
   deleteProject,
+  githubCreate,
+  githubPull,
+  githubPush,
   newProject,
   openProject,
+  pullFromCloud,
+  refreshCloudProjects,
   restoreCheckpoint,
+  saveGithubToken,
   saveKey,
   signIn,
   signOut,
@@ -15,7 +21,7 @@ import {
 } from '../actions';
 import { host, isWeb } from '../host';
 import { setState, useStore } from '../store';
-import { Cloud, Folder, Plus, Trash, Undo, X } from './Icons';
+import { Cloud, Download, Folder, Plus, Trash, Undo, Upload, X } from './Icons';
 
 function Scrim({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
@@ -323,7 +329,14 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
 function ProjectsModal({ onClose }: { onClose: () => void }) {
   const projects = useStore((s) => s.projects);
   const current = useStore((s) => s.project);
+  const account = useStore((s) => s.account);
+  const cloud = useStore((s) => s.cloudProjects);
+  const busy = useStore((s) => s.githubBusy);
   const [name, setName] = useState('');
+
+  useEffect(() => {
+    void refreshCloudProjects();
+  }, []);
 
   return (
     <Scrim onClose={onClose}>
@@ -376,7 +389,45 @@ function ProjectsModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="field">
-          <label>Your projects</label>
+          <label>From your account</label>
+          {!account ? (
+            <div className="desc" style={{ marginTop: 0 }}>
+              <button className="linkish" onClick={() => void signIn()}>
+                Sign in
+              </button>{' '}
+              to see projects you started on another device — write a prompt on your phone, then pull the result down
+              here.
+            </div>
+          ) : busy ? (
+            <div className="activity">
+              <div className="spin" />
+              <span className="shimmer">{busy}</span>
+            </div>
+          ) : cloud.length === 0 ? (
+            <div className="desc" style={{ marginTop: 0 }}>Nothing in the cloud yet. Projects sync up as you work.</div>
+          ) : (
+            <div className="opts">
+              {cloud.map((entry) => (
+                <div className="opt" key={entry.id}>
+                  <Cloud size={16} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="t">{entry.name}</div>
+                    <div className="s">
+                      {entry.fileCount} file{entry.fileCount === 1 ? '' : 's'} ·{' '}
+                      {new Date(entry.updatedAt).toLocaleString()}
+                    </div>
+                  </div>
+                  <button className="btn tiny" onClick={() => void pullFromCloud(entry.id)}>
+                    <Download size={12} /> Open here
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="field">
+          <label>On this {isWeb ? 'browser' : 'computer'}</label>
           {projects.length === 0 ? (
             <div className="desc" style={{ marginTop: 0 }}>Nothing yet — describe an idea and one gets made for you.</div>
           ) : (
@@ -411,6 +462,149 @@ function ProjectsModal({ onClose }: { onClose: () => void }) {
           )}
         </div>
       </div>
+      <footer>
+        <button className="btn" onClick={onClose}>
+          Close
+        </button>
+      </footer>
+    </Scrim>
+  );
+}
+
+/* ---------------------------------------------------------------- github */
+
+function GitHubModal({ onClose }: { onClose: () => void }) {
+  const link = useStore((s) => s.repoLink);
+  const user = useStore((s) => s.githubUser);
+  const busy = useStore((s) => s.githubBusy);
+  const project = useStore((s) => s.project);
+  const keys = useStore((s) => s.configuredKeys);
+
+  const [token, setToken] = useState('');
+  const [repo, setRepo] = useState(link ? `${link.owner}/${link.repo}` : '');
+  const [message, setMessage] = useState('');
+  const connected = keys.includes('github');
+
+  return (
+    <Scrim onClose={onClose}>
+      <header>
+        GitHub
+        <div style={{ flex: 1 }} />
+        <button className="iconbtn" onClick={onClose}>
+          <X size={14} />
+        </button>
+      </header>
+
+      <div className="content">
+        {!connected ? (
+          <div className="field">
+            <label>Connect your account</label>
+            <input
+              type="password"
+              value={token}
+              autoFocus
+              placeholder="ghp_… or github_pat_…"
+              onChange={(e) => setToken(e.target.value)}
+            />
+            <div className="desc">
+              A personal access token with <b>Contents: read and write</b>. Create one at{' '}
+              <a
+                href="https://github.com/settings/tokens"
+                onClick={(e) => {
+                  e.preventDefault();
+                  host.openExternal('https://github.com/settings/tokens?type=beta');
+                }}
+                style={{ color: 'var(--accent-2)' }}
+              >
+                github.com/settings/tokens
+              </a>
+              . Stored {isWeb ? 'in this browser' : 'encrypted on this machine'} and sent only to GitHub.
+            </div>
+            <button
+              className="btn primary"
+              style={{ marginTop: 9 }}
+              disabled={!token.trim()}
+              onClick={() => void saveGithubToken(token.trim())}
+            >
+              Connect
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="notice">
+              <span>✓</span>
+              <span>
+                Connected{user ? ` as ${user}` : ''}.{' '}
+                <button
+                  className="linkish"
+                  onClick={() => {
+                    void saveGithubToken('');
+                    setToken('');
+                  }}
+                >
+                  Disconnect
+                </button>
+              </span>
+            </div>
+
+            <div className="field">
+              <label>Repository</label>
+              <input
+                type="text"
+                value={repo}
+                placeholder="https://github.com/you/your-repo  ·  or  you/your-repo"
+                onChange={(e) => setRepo(e.target.value)}
+              />
+              <div className="desc">Paste a link to pull it down, or to choose where this project gets saved.</div>
+            </div>
+
+            <div className="field">
+              <label>Commit message</label>
+              <input
+                type="text"
+                value={message}
+                placeholder="Update from Masterpiece Coder"
+                onChange={(e) => setMessage(e.target.value)}
+              />
+            </div>
+
+            {busy && (
+              <div className="activity">
+                <div className="spin" />
+                <span className="shimmer">{busy}</span>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="btn" disabled={!repo.trim() || !!busy} onClick={() => void githubPull(repo)}>
+                <Download size={13} /> Pull into this project
+              </button>
+              <button
+                className="btn primary"
+                disabled={!repo.trim() || !!busy}
+                onClick={() => void githubPush(repo, message)}
+              >
+                <Upload size={13} /> Save to GitHub
+              </button>
+              <div style={{ flex: 1 }} />
+              <button
+                className="btn"
+                disabled={!!busy || !project}
+                onClick={() => void githubCreate(project?.name ?? 'masterpiece-project', false)}
+                title="Create a brand new public repository from this project"
+              >
+                <Plus size={13} /> New repo from this project
+              </button>
+            </div>
+
+            <div className="desc">
+              Pulling overwrites files in this project with the ones from the repo. Saving commits everything here as a
+              single commit on the default branch.
+            </div>
+          </>
+        )}
+      </div>
+
       <footer>
         <button className="btn" onClick={onClose}>
           Close
@@ -478,6 +672,7 @@ export function Modals() {
   if (modal === 'settings') return <SettingsModal onClose={close} />;
   if (modal === 'history') return <HistoryModal onClose={close} />;
   if (modal === 'projects') return <ProjectsModal onClose={close} />;
+  if (modal === 'github') return <GitHubModal onClose={close} />;
   if (modal === 'key') return <KeyModal providerId={keyProvider ?? 'anthropic'} onClose={close} />;
   return null;
 }

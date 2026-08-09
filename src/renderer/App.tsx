@@ -9,6 +9,7 @@ import { EditorPane } from './components/EditorPane';
 import { Chat } from './components/Chat';
 import { Modals } from './components/Modals';
 import { Launcher } from './components/Launcher';
+import { Code, Folder, Sparkle } from './components/Icons';
 
 /** Drag handle between two panes; writes a CSS custom property on the grid. */
 function Resizer({
@@ -93,10 +94,34 @@ function StatusBar() {
   );
 }
 
+/** Pane switcher shown only on phone-width screens. */
+function MobileTabs({ view, onChange }: { view: string; onChange: (v: 'files' | 'code' | 'chat') => void }) {
+  const changes = useStore((s) => s.changes.length);
+  const busy = useStore((s) => s.busy);
+
+  return (
+    <div className="mobile-tabs">
+      <button className={view === 'chat' ? 'on' : ''} onClick={() => onChange('chat')}>
+        <Sparkle size={16} />
+        {busy ? 'Working…' : 'Build'}
+      </button>
+      <button className={view === 'code' ? 'on' : ''} onClick={() => onChange('code')}>
+        <Code size={16} />
+        Code
+      </button>
+      <button className={view === 'files' ? 'on' : ''} onClick={() => onChange('files')}>
+        <Folder size={16} />
+        Files{changes > 0 ? ` (${changes})` : ''}
+      </button>
+    </div>
+  );
+}
+
 export function App() {
   const ready = useStore((s) => s.ready);
   const project = useStore((s) => s.project);
   const toast = useStore((s) => s.toast);
+  const [mobileView, setMobileView] = useState<'files' | 'code' | 'chat'>('chat');
 
   useEffect(() => {
     void boot();
@@ -125,7 +150,7 @@ export function App() {
       <TitleBar />
 
       {project ? (
-        <div className="body" style={{ position: 'relative' }}>
+        <div className="body" data-view={mobileView} style={{ position: 'relative' }}>
           <Explorer />
           <EditorPane />
           <Chat />
@@ -136,6 +161,7 @@ export function App() {
         <Launcher />
       )}
 
+      {project && <MobileTabs view={mobileView} onChange={setMobileView} />}
       <StatusBar />
       <Modals />
       {toast && <div className="toast">{toast}</div>}

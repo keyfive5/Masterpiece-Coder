@@ -1,7 +1,7 @@
 import { Net, NetResponse } from '../../core/types';
 import { IGNORED_DIRS, Workspace } from '../../core/workspace';
 import { languageFor, looksBinary } from '../../shared/lang';
-import { DEFAULT_SETTINGS, FileContent, FileNode, ProjectInfo, Settings } from '../../shared/types';
+import { DEFAULT_SETTINGS, FileContent, FileNode, migrateSettings, ProjectInfo, Settings } from '../../shared/types';
 import { Host } from './types';
 
 /* ---------------------------------------------------------------- OPFS */
@@ -315,7 +315,7 @@ export function createBrowserHost(): Host {
     },
 
     async getSettings(): Promise<Settings> {
-      return readJson<Settings>(SETTINGS_KEY, DEFAULT_SETTINGS);
+      return migrateSettings(readJson<Settings>(SETTINGS_KEY, DEFAULT_SETTINGS));
     },
 
     async setSettings(patch: Partial<Settings>): Promise<Settings> {

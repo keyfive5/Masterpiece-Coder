@@ -23,6 +23,10 @@ export class Agent {
   private readonly pending = new Map<string, (approved: boolean) => void>();
   private readonly sessionAllow = new Set<string>();
   private anthropicFeatures: AnthropicFeatures = { thinking: true, effort: true, cache: true };
+  /** Models already rejected this session, so a fallback never loops. */
+  private readonly triedModels = new Set<string>();
+  /** Sticks a working fallback model for the rest of the session. */
+  private preferredModel: string | null = null;
 
   readonly checkpoints = new CheckpointStore();
   busy = false;
@@ -115,8 +119,16 @@ export class Agent {
       const schemas = schemasFor(workspace);
       const tools = new Map(toolsFor(workspace).map((t) => [t.name, t]));
 
+      // Weaker models sometimes answer with prose describing the code instead of
+      // calling write_file. Rather than ending the turn with nothing built, push
+      // back once or twice and let them correct themselves.
+      let nudges = 0;
+      const MAX_NUDGES = 2;
+
       for (let step = 0; step < MAX_STEPS; step++) {
         if (signal.aborted) break;
+
+        emit({ type: 'activity', label: step === 0 ? 'Thinking about your idea' : 'Thinking' });
 
         const blockId = `b_${turnId}_${step}`;
         let openedText = false;
@@ -184,13 +196,38 @@ export class Agent {
         }
 
         if (result.toolCalls.length === 0) {
+          const wroteCode = /```|<\/?[a-z]+[\s>]/i.test(result.text);
+          const builtNothing = (await workspace.walk()).length === 0;
+
+          if ((wroteCode || builtNothing) && nudges < MAX_NUDGES) {
+            nudges++;
+            emit({
+              type: 'notice',
+              level: 'info',
+              message: builtNothing
+                ? 'It replied without creating anything — asking it to actually write the files.'
+                : 'It pasted code instead of saving it — asking it to write the files properly.',
+            });
+            this.messages.push({
+              role: 'user',
+              content:
+                'You did not create any files. Do not describe or paste code in your reply. ' +
+                'Call the write_file tool now, once per file, with the complete contents of each file. ' +
+                'Then keep going until the project actually runs.',
+            });
+            continue;
+          }
+
           emit({ type: 'turn_end', turnId, stopReason: result.stopReason });
           break;
         }
 
+        nudges = 0;
+
         const outcomes: ToolOutcome[] = [];
         for (const call of result.toolCalls) {
           if (signal.aborted) break;
+          emit({ type: 'activity', label: describeCall(call.name, call.input) });
           emit({ type: 'tool_start', id: call.id, name: call.name, input: call.input });
 
           const tool = tools.get(call.name);
@@ -253,7 +290,7 @@ export class Agent {
   ) {
     const provider = providerById(providerId);
     const request = {
-      model: settings.model,
+      model: this.preferredModel ?? settings.model,
       system,
       messages: this.messages,
       tools: schemas,
@@ -277,14 +314,59 @@ export class Agent {
     try {
       return await runTurn(options, request, handlers);
     } catch (err) {
-      if (err instanceof ProviderError && err.message === '__PUTER_SIGNIN__') {
-        emit({ type: 'notice', level: 'info', message: 'Signing you in to the free AI service…' });
+      if (!(err instanceof ProviderError)) throw err;
+
+      if (err.message === '__PUTER_SIGNIN__') {
+        emit({ type: 'activity', label: 'Waiting for you to sign in' });
         const signedIn = await this.host.requestSignIn();
         if (!signedIn) throw new ProviderError('Sign-in was cancelled, so nothing was built.', 401);
+        emit({ type: 'activity', label: 'Thinking' });
         return runTurn(options, request, handlers);
       }
+
+      // The chosen model is not available — walk down the provider's list rather
+      // than dead-ending on a name that happens to have been retired.
+      if (err.message.startsWith('__PUTER_MODEL__')) {
+        const alternatives = provider.models.map((m) => m.id).filter((id) => !this.triedModels.has(id));
+        const next = alternatives[0];
+        if (!next) {
+          throw new ProviderError(`No free model is available right now. Try again shortly, or pick another provider in Settings.`, 404);
+        }
+        this.triedModels.add(next);
+        emit({ type: 'notice', level: 'info', message: `${settings.model} is not available — switching to ${next}.` });
+        this.preferredModel = next;
+        return runTurn(options, { ...request, model: next }, handlers);
+      }
+
       throw err;
     }
+  }
+}
+
+/** Human-readable "currently doing X" text for the activity strip. */
+function describeCall(name: string, input: any): string {
+  const path = typeof input?.path === 'string' ? input.path : '';
+  switch (name) {
+    case 'write_file':
+      return `Writing ${path}`;
+    case 'edit_file':
+      return `Editing ${path}`;
+    case 'read_file':
+      return `Reading ${path}`;
+    case 'delete_file':
+      return `Deleting ${path}`;
+    case 'list_files':
+      return 'Looking around the project';
+    case 'find_files':
+      return `Searching for ${input?.pattern ?? 'files'}`;
+    case 'search_code':
+      return 'Searching the code';
+    case 'run_command':
+      return `Running ${String(input?.command ?? '').slice(0, 50)}`;
+    case 'update_plan':
+      return 'Updating the plan';
+    default:
+      return name;
   }
 }
 

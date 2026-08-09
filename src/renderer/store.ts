@@ -39,6 +39,12 @@ export interface UIState {
   account: { username: string } | null;
   syncing: boolean;
 
+  /** Projects stored in the signed-in account, made on any device. */
+  cloudProjects: { id: string; name: string; updatedAt: number; fileCount: number }[];
+  githubUser: string | null;
+  githubBusy: string | null;
+  repoLink: { owner: string; repo: string } | null;
+
   tree: Record<string, FileNode[]>;
   expanded: string[];
   tabs: string[];
@@ -49,6 +55,9 @@ export interface UIState {
   todos: TodoItem[];
   changes: FileChange[];
   busy: boolean;
+  /** What the agent is doing right now, shown while it works. */
+  activity: string;
+  startedAt: number;
 
   usage: { input: number; output: number; cost: number };
 
@@ -59,7 +68,7 @@ export interface UIState {
   output: string;
   outputOpen: boolean;
 
-  modal: null | 'settings' | 'history' | 'key' | 'projects';
+  modal: null | 'settings' | 'history' | 'key' | 'projects' | 'github';
   /** Which provider the key modal is collecting for. */
   keyProvider: string | null;
   checkpoints: CheckpointInfo[];
@@ -76,6 +85,11 @@ const initial: UIState = {
   account: null,
   syncing: false,
 
+  cloudProjects: [],
+  githubUser: null,
+  githubBusy: null,
+  repoLink: null,
+
   tree: {},
   expanded: [],
   tabs: [],
@@ -86,6 +100,8 @@ const initial: UIState = {
   todos: [],
   changes: [],
   busy: false,
+  activity: '',
+  startedAt: 0,
 
   usage: { input: 0, output: 0, cost: 0 },
 

@@ -1,7 +1,7 @@
 import { app, safeStorage } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { DEFAULT_SETTINGS, ProjectInfo, Settings } from '../shared/types';
+import { DEFAULT_SETTINGS, migrateSettings, ProjectInfo, Settings } from '../shared/types';
 
 interface Persisted {
   settings: Settings;
@@ -33,7 +33,7 @@ function load(): Persisted {
     cache = {
       ...DEFAULTS,
       ...parsed,
-      settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
+      settings: migrateSettings(parsed.settings),
       projects: parsed.projects ?? [],
       keys: parsed.keys ?? {},
     };

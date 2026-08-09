@@ -49,7 +49,11 @@ const keyCache: Record<string, string> = {};
 function handleEvent(event: AgentEvent): void {
   switch (event.type) {
     case 'turn_start':
-      setState({ busy: true });
+      setState({ busy: true, activity: 'Getting started', startedAt: Date.now() });
+      break;
+
+    case 'activity':
+      setState({ activity: event.label });
       break;
 
     case 'block_start':
@@ -126,7 +130,7 @@ function handleEvent(event: AgentEvent): void {
       break;
 
     case 'idle':
-      setState({ busy: false, checkpoints: agent.checkpoints.list() });
+      setState({ busy: false, activity: '', checkpoints: agent.checkpoints.list() });
       // Refresh the preview so a finished build is immediately visible.
       if (getState().center === 'preview') void openPreview();
       break;
@@ -151,6 +155,12 @@ export async function boot(): Promise<void> {
     const account = await puterAuth.user();
     if (account) setState({ account });
   })();
+
+  if (keyCache.github) {
+    void import('../core/github').then(async ({ whoAmI }) => {
+      setState({ githubUser: await whoAmI(host.net, keyCache.github) });
+    });
+  }
 
   const last = await host.lastProject();
   if (last) await activateProject(last);
@@ -178,8 +188,10 @@ async function activateProject(project: ProjectInfo): Promise<void> {
     center: 'editor',
     usage: { input: 0, output: 0, cost: 0 },
     checkpoints: [],
+    repoLink: null,
   });
   await refreshTree();
+  setState({ repoLink: await readRepoLink() });
 }
 
 /* ---------------------------------------------------------------- projects */
@@ -213,6 +225,39 @@ export async function deleteProject(location: string): Promise<void> {
 
 export async function refreshProjects(): Promise<void> {
   setState({ projects: await host.listProjects() });
+}
+
+/**
+ * Projects made on another device. This is the other half of the phone story:
+ * write the prompt outside, then pull the result down on the computer at home.
+ */
+export async function refreshCloudProjects(): Promise<void> {
+  if (!getState().account) {
+    setState({ cloudProjects: [] });
+    return;
+  }
+  const { listCloudProjects } = await import('./sync');
+  setState({ cloudProjects: await listCloudProjects() });
+}
+
+export async function pullFromCloud(id: string): Promise<void> {
+  setState({ githubBusy: 'Downloading from your account…' });
+  try {
+    const { pullProject } = await import('./sync');
+    const project = await pullProject(id);
+    if (!project) {
+      toast('That project could not be downloaded.');
+      return;
+    }
+    await refreshProjects();
+    await activateProject(project);
+    setState({ modal: null });
+    toast(`Opened ${project.name} from your account`);
+  } catch (err) {
+    toast((err as Error).message);
+  } finally {
+    setState({ githubBusy: null });
+  }
 }
 
 /* ---------------------------------------------------------------- files */
@@ -304,7 +349,9 @@ export async function sendMessage(text: string, attachments: string[] = []): Pro
   if (!workspace) return;
 
   pushChat({ kind: 'user', id: `u_${Date.now()}`, text: trimmed, attachments });
-  setState({ busy: true });
+  // Flip to working immediately — the first network round trip can take a few
+  // seconds and the app must never look like it ignored you.
+  setState({ busy: true, activity: 'Getting started', startedAt: Date.now() });
   await agent.send(trimmed, attachments, workspace, settings, handleEvent);
 }
 
@@ -429,6 +476,118 @@ export async function revertChange(path: string, before: string | null): Promise
   await refreshTree();
   queueSync();
   toast(`Reverted ${path}`);
+}
+
+/* ---------------------------------------------------------------- github */
+
+/**
+ * The repo a project is linked to lives inside the project itself, under
+ * `.masterpiece/` — which is on the ignore list, so it never gets committed and
+ * the agent never sees it, but it does travel with the project when it syncs.
+ */
+const LINK_FILE = '.masterpiece/github.json';
+
+export async function readRepoLink(): Promise<{ owner: string; repo: string } | null> {
+  if (!workspace) return null;
+  const raw = await workspace.read(LINK_FILE);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed?.owner && parsed?.repo ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeRepoLink(ref: { owner: string; repo: string }): Promise<void> {
+  await workspace?.write(LINK_FILE, JSON.stringify(ref, null, 2));
+  setState({ repoLink: ref });
+}
+
+export async function saveGithubToken(token: string): Promise<void> {
+  await host.setKey('github', token);
+  keyCache.github = token;
+  const { whoAmI } = await import('../core/github');
+  const login = await whoAmI(host.net, token);
+  setState({ githubUser: login, configuredKeys: await host.configuredKeys() });
+  toast(login ? `Connected to GitHub as ${login}` : 'Token saved, but GitHub did not recognise it');
+}
+
+export async function githubPull(input: string): Promise<void> {
+  if (!workspace) return;
+  const { parseRepo, pullRepo } = await import('../core/github');
+  const ref = parseRepo(input);
+  if (!ref) {
+    toast('That does not look like a GitHub link.');
+    return;
+  }
+
+  setState({ githubBusy: 'Connecting…' });
+  try {
+    const result = await pullRepo(host.net, keyCache.github ?? '', ref, workspace, (label) =>
+      setState({ githubBusy: label }),
+    );
+    await writeRepoLink(ref);
+    await refreshTree();
+    queueSync();
+    toast(`Pulled ${result.files} file${result.files === 1 ? '' : 's'} from ${ref.owner}/${ref.repo}`);
+  } catch (err) {
+    toast((err as Error).message);
+  } finally {
+    setState({ githubBusy: null });
+  }
+}
+
+export async function githubPush(input: string, message: string): Promise<void> {
+  if (!workspace) return;
+  const { parseRepo, pushRepo } = await import('../core/github');
+  const ref = parseRepo(input);
+  if (!ref) {
+    toast('That does not look like a GitHub link.');
+    return;
+  }
+
+  setState({ githubBusy: 'Connecting…' });
+  try {
+    const result = await pushRepo(
+      host.net,
+      keyCache.github ?? '',
+      ref,
+      workspace,
+      message || 'Update from Masterpiece Coder',
+      (label) => setState({ githubBusy: label }),
+    );
+    await writeRepoLink(ref);
+    toast(`Saved ${result.files} files to ${ref.owner}/${ref.repo} — commit ${result.commit}`);
+  } catch (err) {
+    toast((err as Error).message);
+  } finally {
+    setState({ githubBusy: null });
+  }
+}
+
+export async function githubCreate(name: string, isPrivate: boolean): Promise<void> {
+  if (!workspace) return;
+  const { createRepo, pushRepo } = await import('../core/github');
+  setState({ githubBusy: 'Creating the repository…' });
+  try {
+    const ref = await createRepo(host.net, keyCache.github ?? '', name, isPrivate);
+    const result = await pushRepo(
+      host.net,
+      keyCache.github ?? '',
+      ref,
+      workspace,
+      'First commit from Masterpiece Coder',
+      (label) => setState({ githubBusy: label }),
+    );
+    await writeRepoLink(ref);
+    toast(`Created ${ref.owner}/${ref.repo} with ${result.files} files`);
+    host.openExternal(ref.url);
+  } catch (err) {
+    toast((err as Error).message);
+  } finally {
+    setState({ githubBusy: null });
+  }
 }
 
 /* ---------------------------------------------------------------- preview */

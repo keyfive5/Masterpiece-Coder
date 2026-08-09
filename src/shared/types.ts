@@ -15,11 +15,32 @@ export interface Settings {
   alwaysAllow: string[];
   /** Full chat-completions URL for the "Custom endpoint" provider. */
   customEndpoint: string;
+  /** Bumped when a stored setting needs correcting on load. */
+  version?: number;
+}
+
+const SETTINGS_VERSION = 2;
+
+/**
+ * Repairs settings saved by earlier builds. Only ever corrects choices the user
+ * did not actually make — a default we shipped and then found to be wrong.
+ */
+export function migrateSettings(saved: Partial<Settings> | null | undefined): Settings {
+  const settings: Settings = { ...DEFAULT_SETTINGS, ...(saved ?? {}) };
+
+  // v2: the original free default was gpt-5-nano, which is too weak to carry a
+  // build to completion. Anyone still on it never chose it.
+  if ((settings.version ?? 1) < 2 && settings.provider === 'puter' && settings.model === 'gpt-5-nano') {
+    settings.model = DEFAULT_SETTINGS.model;
+  }
+
+  settings.version = SETTINGS_VERSION;
+  return settings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   provider: 'puter',
-  model: 'gpt-5-nano',
+  model: 'claude-sonnet-4-5',
   effort: 'high',
   approvalMode: 'autopilot',
   showThinking: true,
@@ -96,6 +117,8 @@ export type AgentEvent =
   | { type: 'usage'; delta: UsageDelta }
   | { type: 'command_output'; id: string; chunk: string }
   | { type: 'notice'; level: 'info' | 'warn' | 'error'; message: string }
+  /** Drives the "it is working" strip so the app never looks frozen. */
+  | { type: 'activity'; label: string }
   | { type: 'need_key'; provider: string }
   | { type: 'turn_end'; turnId: string; stopReason: string | null }
   | { type: 'idle' };

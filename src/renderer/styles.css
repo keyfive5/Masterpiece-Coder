@@ -790,6 +790,33 @@ select {
   background: var(--panel-2);
 }
 
+.linkish {
+  color: var(--accent-2);
+  text-decoration: underline;
+  padding: 0;
+}
+
+/* activity strip */
+
+.activity {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border-radius: 11px;
+  border: 1px solid rgba(124, 140, 255, 0.3);
+  background: linear-gradient(180deg, rgba(124, 140, 255, 0.1), rgba(124, 140, 255, 0.03));
+  font-size: 12.6px;
+  position: sticky;
+  bottom: 0;
+  animation: rise 200ms ease both;
+}
+.activity-time {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+
 /* notices */
 
 .notice {
@@ -993,6 +1020,111 @@ select {
 }
 .status .live {
   color: var(--accent-2);
+}
+
+/* ---------------------------------------------------------------- phone */
+
+/*
+ * On a phone the three panes become one, switched by a bottom bar. The chat is
+ * the default because the phone use case is "I had an idea in the street" —
+ * type it, watch it build, glance at the preview.
+ */
+.mobile-tabs {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .app {
+    grid-template-rows: 44px 1fr auto;
+  }
+
+  .body {
+    grid-template-columns: 1fr !important;
+  }
+
+  .resizer {
+    display: none;
+  }
+
+  /* Only the selected pane is laid out; the others are removed entirely so
+     Monaco does not try to measure itself at zero width. */
+  .body > .pane {
+    display: none;
+  }
+  .body[data-view='files'] > .pane:nth-child(1),
+  .body[data-view='code'] > .pane:nth-child(2),
+  .body[data-view='chat'] > .pane:nth-child(3) {
+    display: flex;
+  }
+
+  .mobile-tabs {
+    display: flex;
+    background: var(--panel);
+    border-top: 1px solid var(--line-soft);
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    gap: 6px;
+  }
+  .mobile-tabs button {
+    flex: 1;
+    padding: 9px 0;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--faint);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+  }
+  .mobile-tabs button.on {
+    background: var(--raised);
+    color: var(--text);
+  }
+
+  .status {
+    display: none;
+  }
+
+  .titlebar {
+    padding-left: 10px;
+    gap: 7px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .titlebar::-webkit-scrollbar {
+    display: none;
+  }
+  .titlebar .brand span {
+    display: none;
+  }
+
+  .launcher {
+    padding: 24px 16px 40px;
+    place-items: start center;
+  }
+  .launcher h1 {
+    font-size: 25px;
+  }
+  .launcher .lead {
+    font-size: 13.5px;
+  }
+  .launcher-box textarea {
+    font-size: 16px; /* iOS zooms the page for anything smaller */
+  }
+
+  .composer textarea,
+  .field input,
+  .field textarea {
+    font-size: 16px;
+  }
+
+  .modal {
+    max-height: 92vh;
+  }
+
+  .msg-user {
+    max-width: 100%;
+  }
 }
 
 /* ---------------------------------------------------------------- launcher */
