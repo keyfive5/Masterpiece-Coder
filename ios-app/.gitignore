@@ -7,3 +7,5 @@ credentials.json
 *.p8
 *.p12
 *.mobileprovision
+.export-check/
+
