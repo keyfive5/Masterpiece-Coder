@@ -32,12 +32,29 @@ endpoint** you point it at.
 | | Free | Needs a key | Notes |
 |---|---|---|---|
 | **Free (Puter)** | ✅ | — | One-click sign-in. Also syncs your projects. |
+| **Built in** | ✅ | — | Ships with the app. No account, no network, no download — see below |
+| **On this machine** | ✅ | — | A real model on your own GPU. ~1–3 GB download, once |
 | Google Gemini | ✅ free tier | key | Takes about a minute to get one |
 | OpenRouter | ✅ free models | key | One key, hundreds of models |
 | Ollama | ✅ local | — | Desktop app only — a web page cannot reach your machine |
 | Anthropic | — | key | Claude. The strongest coding models. |
 | OpenAI | — | key | GPT |
 | Custom endpoint | depends | optional | LM Studio, vLLM, a gateway at work |
+
+### You are never stuck with nothing
+
+Two of those need neither an account nor a connection:
+
+**Built in** is not a language model. It reads your prompt, recognises what you
+are after, and builds it from a blueprint — a maze game, snake, a to-do list, a
+focus timer, a landing page, or a styled starter page for anything else. Each
+one is a complete working app in plain HTML/CSS/JS. Instant, offline, every
+time. It can only make what it knows, but it always makes *something*.
+
+**On this machine** downloads a Qwen2.5-Coder model and runs it on your own GPU
+through WebGPU. Slower and weaker than the hosted models, and it needs a few
+gigabytes, but after the first download it works with no internet at all and
+nothing you type leaves the computer.
 
 ## What's in the window
 
@@ -80,6 +97,31 @@ live preview of the thing you just built.
 | **Permissions** | Autopilot by default; switch to *Ask first* and every write and command waits for you. |
 | **Cost meter** | Only ever non-zero when you are using a paid key of your own. |
 | **Sandboxed** | Every path the agent touches is confined to the project. Previewed code runs in an iframe with no access to your account or storage. |
+
+## On your phone
+
+Open the site on your phone and **Add to Home Screen** — it installs with an
+icon and opens full screen with no browser chrome. The three panes become one
+with a bottom switcher, so you get the prompt, the code and the preview on a
+small screen.
+
+Had an idea while you were out? Type it on the phone, let it build, and when
+you get home open **Projects → From your account → Open here** on the desktop.
+The files land in your project folder.
+
+There is also a native iOS shell in [`ios-app/`](ios-app/) — double-click
+`BUILD-IPHONE.bat` to build it and send it to TestFlight.
+
+## Saving to GitHub
+
+The GitHub button in the title bar connects a personal access token, then:
+
+- **Pull** any repo link into the current project
+- **Save** the project back as a single clean commit
+- **New repo from this project**
+
+It goes through the GitHub REST API rather than a git binary, so it works in
+the browser too.
 
 ## Running the desktop app
 
