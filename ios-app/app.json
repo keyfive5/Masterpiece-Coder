@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "Masterpiece Coder",
+    "slug": "masterpiece-coder",
+    "version": "1.0.0",
+    "platforms": ["ios", "android", "web"],
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "masterpiececoder",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#090b10",
+    "primaryColor": "#7c8cff",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#090b10"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.hasanzafar.masterpiececoder",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false
+        }
+      }
+    },
+    "android": {
+      "package": "com.hasanzafar.masterpiececoder",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#090b10"
+      }
+    },
+    "web": { "favicon": "./assets/favicon.png" },
+    "owner": "keyfive"
+  }
+}

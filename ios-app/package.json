@@ -1,0 +1,25 @@
+{
+  "name": "masterpiece-coder-ios",
+  "version": "1.0.0",
+  "main": "index.js",
+  "private": true,
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo start --ios",
+    "icons": "node make-assets.mjs",
+    "build": "eas build --platform ios --profile production --non-interactive",
+    "submit": "eas submit --platform ios --profile production --non-interactive --latest"
+  },
+  "dependencies": {
+    "expo": "~57.0.8",
+    "expo-asset": "~12.0.9",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.0",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-webview": "13.16.1"
+  },
+  "devDependencies": {
+    "eas-cli": "^21.2.0"
+  }
+}
