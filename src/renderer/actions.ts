@@ -129,11 +129,16 @@ function handleEvent(event: AgentEvent): void {
       setState({ modal: 'key', keyProvider: event.provider });
       break;
 
-    case 'idle':
+    case 'idle': {
       setState({ busy: false, activity: '', checkpoints: agent.checkpoints.list() });
-      // Refresh the preview so a finished build is immediately visible.
-      if (getState().center === 'preview') void openPreview();
+      void refreshPlayable();
+      // Show the finished thing rather than making anyone go hunting for it.
+      // Only when this turn actually changed files, so it never yanks you out
+      // of the editor mid-read.
+      const state = getState();
+      if (state.center === 'preview' || state.changes.length > 0) void openPreview();
       break;
+    }
 
     case 'turn_end':
       break;
@@ -192,6 +197,7 @@ async function activateProject(project: ProjectInfo): Promise<void> {
   });
   await refreshTree();
   setState({ repoLink: await readRepoLink() });
+  await refreshPlayable();
 }
 
 /* ---------------------------------------------------------------- projects */
@@ -591,6 +597,16 @@ export async function githubCreate(name: string, isPrivate: boolean): Promise<vo
 }
 
 /* ---------------------------------------------------------------- preview */
+
+/** Is there something runnable here? Drives the Play button. */
+export async function refreshPlayable(): Promise<void> {
+  if (!workspace) {
+    setState({ playable: false });
+    return;
+  }
+  const files = await workspace.walk();
+  setState({ playable: files.some((f) => f.toLowerCase().endsWith('.html')) });
+}
 
 export async function openPreview(): Promise<void> {
   const { project } = getState();

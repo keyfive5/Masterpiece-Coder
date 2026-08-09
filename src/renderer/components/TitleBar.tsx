@@ -1,9 +1,9 @@
 import React from 'react';
 import { providerById } from '../../core/providers';
-import { newSession, signIn, signOut, syncNow } from '../actions';
+import { newSession, openPreview, signIn, signOut, syncNow } from '../actions';
 import { host, isWeb } from '../host';
 import { setState, useStore } from '../store';
-import { Cloud, Folder, Gear, Github, History, Minus, Plus, Square, X } from './Icons';
+import { Cloud, Folder, Gear, Github, History, Minus, Play, Plus, Square, X } from './Icons';
 
 export function TitleBar() {
   const project = useStore((s) => s.project);
@@ -11,6 +11,7 @@ export function TitleBar() {
   const account = useStore((s) => s.account);
   const syncing = useStore((s) => s.syncing);
   const busy = useStore((s) => s.busy);
+  const playable = useStore((s) => s.playable);
 
   const provider = providerById(settings.provider);
 
@@ -36,6 +37,16 @@ export function TitleBar() {
         </span>
         <span style={{ color: 'var(--faint)' }}>{settings.model}</span>
       </button>
+
+      {playable && (
+        <button
+          className="btn play"
+          onClick={() => void openPreview()}
+          title="Run what you have built"
+        >
+          <Play size={12} /> Play
+        </button>
+      )}
 
       <div style={{ flex: 1 }} />
 

@@ -1328,6 +1328,19 @@ select {
   color: var(--accent-2);
 }
 
+/* The one button people look for after a build finishes. */
+.btn.play {
+  background: linear-gradient(135deg, var(--green), #2fb867);
+  border-color: transparent;
+  color: #06240f;
+  font-weight: 650;
+  box-shadow: 0 3px 16px rgba(74, 222, 128, 0.3);
+}
+.btn.play:hover {
+  filter: brightness(1.08);
+  color: #06240f;
+}
+
 /* ---------------------------------------------------------------- welcome */
 
 .welcome {

@@ -7,8 +7,7 @@
     "production": {
       "distribution": "store",
       "ios": {
-        "resourceClass": "m-medium",
-        "credentialsSource": "local"
+        "resourceClass": "m-medium"
       },
       "autoIncrement": false
     },

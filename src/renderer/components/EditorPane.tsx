@@ -4,7 +4,7 @@ import { closeTab, editFile, openFile, openPreview, saveActive } from '../action
 import { setState, useStore } from '../store';
 import { host } from '../host';
 import { DiffView } from './DiffView';
-import { Code, Diff, External, Eye, Refresh, Save, Terminal, X } from './Icons';
+import { Code, Diff, External, Eye, Play, Refresh, Save, Terminal, X } from './Icons';
 
 /**
  * The Monaco host stays mounted for the life of the pane — it is only hidden
@@ -227,7 +227,7 @@ export function EditorPane() {
               <Diff size={11} /> Diff{changeCount > 0 ? ` ${changeCount}` : ''}
             </button>
             <button className={center === 'preview' ? 'on' : ''} onClick={() => void openPreview()}>
-              <Eye size={11} /> Preview
+              <Play size={11} /> Play
             </button>
           </div>
           {hasOutput && (

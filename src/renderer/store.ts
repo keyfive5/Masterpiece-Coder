@@ -58,6 +58,8 @@ export interface UIState {
   /** What the agent is doing right now, shown while it works. */
   activity: string;
   startedAt: number;
+  /** The project has something runnable, so the Play button is live. */
+  playable: boolean;
 
   usage: { input: number; output: number; cost: number };
 
@@ -102,6 +104,7 @@ const initial: UIState = {
   busy: false,
   activity: '',
   startedAt: 0,
+  playable: false,
 
   usage: { input: 0, output: 0, cost: 0 },
 
