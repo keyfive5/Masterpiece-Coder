@@ -1,6 +1,6 @@
 # Masterpiece Coder — project state
 
-**Last updated: 12 August 2026** · 12 commits · 54 source files
+**Last updated: 12 August 2026** · 13 commits · 55 source files · 17,200 lines
 
 Read this first for *where things stand*. Read [`CLAUDE.md`](CLAUDE.md) for
 *how to work on it* — architecture, provider traps, verification recipes, and
@@ -99,8 +99,9 @@ ask-first permissions.
   turns in Hasan's own desktop app.
 - **Web app on GitHub Pages** — live, 200, zero failed assets; the live entry
   chunk matches the local `docs/` build.
-- **Desktop app** — smoke test passes; Monaco mounts with syntax highlighting;
-  three panes; preview server serves the project.
+- **Desktop app** — smoke test passes after the Maestro build; Monaco mounts
+  with syntax highlighting (182 tokens); three panes; preview server serves the
+  project. `docs/` and `release/Masterpiece Coder.exe` both rebuilt 12 Aug.
 - **Play button** — appears whenever the project has an HTML file, and the
   preview auto-opens when a turn changed files.
 - **Activity strip** — measured present in 100% of frames while the agent runs,
@@ -125,7 +126,7 @@ ask-first permissions.
 ## 5. History — what was asked, what happened
 
 1. **"Make my own Claude Code / Cursor."** Electron + React + Monaco app with a
-   real agent loop, nine tools, checkpoints, diff view, preview.
+   real agent loop, tools, checkpoints, diff view, preview.
 2. **"Make it free, prompt first, more AIs, GitHub Pages, login."** Rebuilt
    around a prompt-first launcher; agent loop moved out of the Electron main
    process into `src/core` so the same code runs in a browser; OPFS workspace
@@ -146,7 +147,7 @@ ask-first permissions.
 7. **"Play button; the dance game was unplayable."** Play button + auto-open
    preview; prompt now forces the model to reason about the play loop first.
 8. **"Make a native AI in this project, so good it massively improves what gets
-   built."** Maestro — `src/core/maestro/`, about 8,000 lines. An intent
+   built."** Maestro — `src/core/maestro/`, 9,500 lines. An intent
    compiler, a knowledge base of 45 archetypes with tuned numbers, 22
    contrast-checked palettes, a planner, a 45-rule critic, an auto-repairer and
    a synthesiser that builds 24 kinds of complete project with no model at all.
