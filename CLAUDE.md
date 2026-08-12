@@ -35,8 +35,8 @@ src/
     agent.ts              the loop: stream, run tools, feed results back
     providers.ts          every provider, five wire formats
     local.ts              WebLLM (on-device model), lazy-imported
-    builtin/templates.ts  the offline builder's project blueprints
-    tools.ts              nine tools, written against Workspace
+    maestro/              the native intelligence — see below
+    tools.ts              ten tools, written against Workspace
     workspace.ts          the Workspace contract + path confinement
     checkpoints.ts        per-turn snapshots and rewind
     github.ts             pull/push via the GitHub REST API
@@ -55,6 +55,61 @@ docs/                   the built web app, served by GitHub Pages
 
 Desktop network calls are proxied through the main process (`src/main/net.ts`),
 which means no CORS limits on any provider and API keys never reach the page.
+
+## Maestro — `src/core/maestro/`
+
+The native intelligence. It wraps whichever AI is doing the writing and can
+also build entirely on its own. Everything in it is deterministic, offline and
+free; nothing here calls a model.
+
+```
+maestro/
+  types.ts        the shared vocabulary
+  knowledge.ts    45 archetypes: requirements, named failure modes, TUNED NUMBERS
+  spec.ts         the intent compiler — a sentence becomes a structured Spec
+  design.ts       22 contrast-checked palettes, 9 system-font pairings
+  plan.ts         Spec → milestones, each with the condition that ends it
+  brief.ts        renders the ~7 KB specification injected into the system prompt
+  critic.ts       ~45 rules, run against the files that actually landed
+  repair.ts       the fixes that cannot be wrong, applied without asking
+  synth/          the synthesiser: complete projects with no model at all
+```
+
+The order it runs in:
+
+```
+prompt → compileSpec → chooseDesign → buildPlan → brief ──▶ the AI writes code
+                                                                   │
+                              autoRepair → critic ─ blockers? ─────┘  (×2)
+```
+
+**The tuning numbers are the point.** "Give the player reaction time" is
+advice; "spawn at y = −40 and travel 580 px to a hit line at y = 540 at
+362 px/s, which is 1.6 s of warning" is a specification. The first produced a
+dance game whose arrows appeared on the hit line. The second cannot.
+
+Facts worth keeping:
+
+- **`knowledge.ts` is the file to edit** when output quality is wrong. A new
+  failure mode goes in as a `pitfall`; a rule that must be enforced goes in
+  `checks` and gets a matching rule in `critic.ts`.
+- **Critic rule ids are a contract** — `scripts/maestro-test.mjs` asserts each
+  one still fires on a planted bug, so a rule cannot silently rot into a no-op.
+- **Which game rules apply is decided by the archetype's `checks`.** A board
+  game has no frame loop and must not be told it is missing one.
+- The critic runs on `blankJs()` output — comments and string bodies blanked,
+  length and newlines preserved — so a brace inside a string cannot break the
+  balance count and line numbers still match.
+- **The synthesiser never lies about what it built.** With no bespoke generator
+  for an archetype it substitutes the nearest one and says so, in the summary
+  and the README. A memory game presented as Tetris would be worse than no
+  Tetris.
+- `settings.maestro` turns the whole thing off. `review_project` is the tool
+  that lets the model run the critic on itself mid-turn.
+- After a turn ends, `agent.ts` runs repair → critic and pushes the report back
+  as a user message when anything is a blocker or a major, up to
+  `MAX_REVIEW_ROUNDS` (2). If the turn produced no files at all, it builds the
+  project natively rather than leaving an empty folder.
 
 ## Providers — read this before changing `providers.ts`
 

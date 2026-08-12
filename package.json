@@ -16,7 +16,9 @@
     "start": "npm run build && electron .",
     "web": "vite --config vite.config.mjs",
     "web:build": "vite build --config vite.config.mjs --base ./ --outDir docs",
-    "pack": "npm run build && electron-builder --win portable --publish never"
+    "pack": "npm run build && electron-builder --win portable --publish never",
+    "test:maestro": "node scripts/maestro-test.mjs",
+    "demo:maestro": "node scripts/maestro-demo.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",

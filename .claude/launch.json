@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "web"],
       "port": 5177
+    },
+    {
+      "name": "maestro-demo",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/maestro-demo.mjs"],
+      "port": 39281
     }
   ]
 }

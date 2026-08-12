@@ -1,3 +1,4 @@
+import { buildNatively, prepare } from './maestro';
 import {
   CoreMessage,
   Net,
@@ -70,13 +71,16 @@ export const PROVIDERS: ProviderDef[] = [
   {
     id: 'builtin',
     label: 'Built in',
-    tagline: 'Works with no account, no key and no internet. Instant, but only knows a handful of things.',
+    tagline: 'Maestro, the builder inside the app. No account, no key, no internet — and instant.',
     wire: 'builtin',
     free: true,
     needsKey: false,
     browserOk: true,
-    note: 'This one is not a language model — it is a builder that ships with the app, so you are never stuck with nothing. It can make a maze game, snake, a to-do list, a focus timer or a landing page, and a styled starter page for anything else.',
-    models: [{ id: 'offline-builder', label: 'Offline builder', blurb: 'No download, no network, always available.' }],
+    note:
+      'Not a language model: a planner and a code generator that ship with the app, so you are never stuck with nothing. ' +
+      'It understands the sentence you typed, picks a palette to suit it, and writes a complete, playable, responsive project — snake, brick breaker, a rhythm game, a runner, a shooter, pong, a maze, memory, tic-tac-toe, sliding numbers, a quiz, a to-do list, a calculator, a focus timer, a drawing pad, a dashboard, a landing page or a résumé. ' +
+      'It builds from blueprints rather than to order, so pick one of the AI providers when you want something truly bespoke.',
+    models: [{ id: 'offline-builder', label: 'Maestro', blurb: 'No download, no network, always available.' }],
   },
   {
     id: 'local',
@@ -735,11 +739,13 @@ async function runPuter(request: TurnRequest, handlers: TurnHandlers): Promise<T
  * always produces something real, even with no account and no network.
  */
 async function runBuiltin(request: TurnRequest, handlers: TurnHandlers): Promise<TurnResult> {
-  const { pickBlueprint } = await import('./builtin/templates');
-
   const firstUser = request.messages.find((m) => m.role === 'user');
   const prompt = firstUser && firstUser.role === 'user' ? firstUser.content : '';
-  const blueprint = pickBlueprint(prompt);
+
+  // Everything this builder makes runs with no build step, so it compiles the
+  // prompt as though it were the web host regardless of where it is running.
+  const brief = prepare(prompt, { canRunCommands: false, hasFiles: false });
+  const blueprint = buildNatively(brief);
 
   const files = Object.entries(blueprint.files);
   const step = request.messages.filter((m) => m.role === 'assistant').length;
@@ -767,7 +773,8 @@ async function runBuiltin(request: TurnRequest, handlers: TurnHandlers): Promise
 
   if (step === 0) {
     const [path, content] = files[0];
-    return done(`Building ${blueprint.title.toLowerCase()} — no network needed for this one.`, [
+    const what = `${brief.archetype.label.toLowerCase()}${brief.spec.subject ? ` about ${brief.spec.subject}` : ''}`;
+    return done(`Building a ${what} in ${brief.design.name.toLowerCase()} — no network needed for this one.`, [
       call('update_plan', {
         todos: blueprint.plan.map((text, i) => ({ text, status: i === 0 ? 'active' : 'pending' })),
       }),
@@ -790,10 +797,7 @@ async function runBuiltin(request: TurnRequest, handlers: TurnHandlers): Promise
     ]);
   }
 
-  return done(
-    `${blueprint.summary}\n\nOpen **Preview** to try it. This came from the built-in builder, so it is a solid starting point rather than a bespoke design — switch to **Free** or your own key in Settings for something made to order.`,
-    [],
-  );
+  return done(blueprint.summary, []);
 }
 
 /* ================================================================

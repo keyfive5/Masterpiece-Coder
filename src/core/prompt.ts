@@ -6,8 +6,10 @@ export function buildSystemPrompt(opts: {
   approvalMode: string;
   workspace: Workspace;
   platform: string;
+  /** The compiled build brief from Maestro, when it is switched on. */
+  brief?: string;
 }): string {
-  const { snapshot, custom, approvalMode, workspace, platform } = opts;
+  const { snapshot, custom, approvalMode, workspace, platform, brief } = opts;
 
   const shell = workspace.canRunCommands
     ? `You can run shell commands with run_command (${platform}). Use it to install packages, run tests and build.`
@@ -55,9 +57,12 @@ Finish by leading with the outcome — what now exists and what it does — in p
 
 # What this app gives you
 - Every message is checkpointed, so the user can rewind a whole turn. Move confidently.
-- The Preview panel renders the project. If you build a web page, say so at the end.${
+- The Preview panel renders the project. If you build a web page, say so at the end.
+- **review_project** reads what you actually wrote and reports what is broken. Call it before you claim to be done.${
+    brief ? `\n\n---\n\n${brief}` : ''
+  }${
     custom.trim()
-      ? `\n\n# The user's standing instructions\nThese come from the user and take priority over the general guidance above.\n${custom.trim()}`
+      ? `\n\n# The user's standing instructions\nThese come from the user and take priority over everything above, including the build brief.\n${custom.trim()}`
       : ''
   }`;
 }

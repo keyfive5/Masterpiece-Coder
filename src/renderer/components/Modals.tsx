@@ -271,6 +271,12 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           <label>Behaviour</label>
           <div className="opts">
             <Toggle
+              on={settings.maestro !== false}
+              label="Maestro"
+              desc="Plan before building and check afterwards. Works out what you meant, chooses a palette, hands the AI the numbers that make the thing actually work, then reads what it wrote and sends anything broken back to be fixed."
+              onChange={(v) => updateSettings({ maestro: v })}
+            />
+            <Toggle
               on={settings.approvalMode === 'autopilot'}
               label="Autopilot"
               desc="Let it write files and run commands without asking each time. Everything is still rewindable."

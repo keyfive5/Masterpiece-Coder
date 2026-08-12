@@ -1,6 +1,7 @@
 import { AgentEvent, TodoItem } from '../shared/types';
 import { diffStat } from '../shared/diff';
 import { looksBinary } from '../shared/lang';
+import { readProject, review, reviewReport, summarise, Spec } from './maestro';
 import { ToolSchema } from './types';
 import { cleanPath, globToRegExp, Workspace } from './workspace';
 
@@ -12,6 +13,8 @@ export interface ToolContext {
   /** Records a file's pre-change contents so the turn can be rewound. */
   capture: (path: string) => Promise<string | null>;
   signal: AbortSignal;
+  /** What Maestro understood this turn to be about, when it is switched on. */
+  spec?: Spec | null;
 }
 
 export interface ToolResult {
@@ -369,6 +372,30 @@ export const TOOLS: ToolDef[] = [
       ctx.emit({ type: 'todos', items });
       const done = items.filter((t) => t.status === 'done').length;
       return { ok: true, summary: `Plan · ${done}/${items.length} done`, content: `Plan updated (${done}/${items.length} complete).` };
+    },
+  },
+
+  {
+    name: 'review_project',
+    guarded: false,
+    description:
+      'Check the project you have built for real problems: files that are referenced but missing, code that does not parse, functions called but never defined, placeholder text left behind, a layout with no responsive rules, a game with no way to lose or no touch controls, low contrast, and the specific failure modes of this kind of project. ' +
+      'Call this before you tell the user you are finished, and again after fixing what it reports. It reads the actual files — it is not an opinion.',
+    parameters: { type: 'object', properties: {} },
+    async run(_input, ctx) {
+      const files = await readProject(ctx.workspace);
+      const findings = review(files, ctx.spec ?? null);
+      const serious = findings.filter((f) => f.severity !== 'minor');
+      const report = reviewReport(findings);
+
+      return {
+        // Reported as a failure when something serious is wrong, so it cannot
+        // be skimmed past — the model has to deal with it.
+        ok: serious.length === 0,
+        summary: `Review · ${summarise(findings)}`,
+        detail: report.slice(0, 4000),
+        content: report,
+      };
     },
   },
 ];

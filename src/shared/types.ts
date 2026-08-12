@@ -15,6 +15,12 @@ export interface Settings {
   alwaysAllow: string[];
   /** Full chat-completions URL for the "Custom endpoint" provider. */
   customEndpoint: string;
+  /**
+   * Maestro — the planner and reviewer built into the app. It compiles the
+   * request into a specification before the AI starts, and checks the result
+   * afterwards. On by default; off means the raw model, unassisted.
+   */
+  maestro: boolean;
   /** Bumped when a stored setting needs correcting on load. */
   version?: number;
 }
@@ -48,6 +54,7 @@ export const DEFAULT_SETTINGS: Settings = {
   customInstructions: '',
   alwaysAllow: [],
   customEndpoint: '',
+  maestro: true,
 };
 
 export interface FileNode {

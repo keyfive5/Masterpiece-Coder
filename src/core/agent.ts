@@ -1,5 +1,16 @@
+import { diffStat } from '../shared/diff';
 import { AgentEvent, Settings } from '../shared/types';
 import { CheckpointStore } from './checkpoints';
+import {
+  autoRepair,
+  Brief,
+  buildNatively,
+  countBySeverity,
+  inspect,
+  prepare,
+  reviewReport,
+  summarise,
+} from './maestro';
 import { buildSystemPrompt } from './prompt';
 import { AnthropicFeatures, priceOf, ProviderError, providerById, runTurn } from './providers';
 import { schemasFor, ToolContext, toolsFor } from './tools';
@@ -16,6 +27,14 @@ export interface AgentHost {
 }
 
 const MAX_STEPS = 60;
+
+/**
+ * How many times a turn may end, be reviewed, and be sent back for repair.
+ * Two is enough in practice: the first round catches the structural mistakes
+ * and the second confirms them fixed. More than that and a model that cannot
+ * fix something starts going in circles.
+ */
+const MAX_REVIEW_ROUNDS = 2;
 
 export class Agent {
   private messages: CoreMessage[] = [];
@@ -88,7 +107,35 @@ export class Agent {
     }
     this.messages.push({ role: 'user', content: prompt });
 
+    // Maestro compiles the request into a specification before anything is
+    // written: what kind of thing this is, what it needs, the numbers that
+    // make it work, and a palette. It costs nothing — no network, no model.
+    let brief: Brief | null = null;
+    if (settings.maestro !== false) {
+      try {
+        emit({ type: 'activity', label: 'Working out what you mean' });
+        brief = prepare(text, {
+          canRunCommands: workspace.canRunCommands,
+          hasFiles: (await workspace.walk()).length > 0,
+        });
+        if (!brief.spec.isEdit) {
+          emit({
+            type: 'notice',
+            level: 'info',
+            message:
+              `Building a ${brief.archetype.label.toLowerCase()}${brief.spec.subject ? ` about ${brief.spec.subject}` : ''}` +
+              ` · ${brief.design.name} · ${brief.plan.milestones.length} steps` +
+              (brief.spec.confidence < 0.34 ? ' — the request was open-ended, so this is an interpretation.' : '.'),
+          });
+        }
+      } catch (err) {
+        // A failure to understand the prompt must never stop the build.
+        brief = null;
+      }
+    }
+
     const ctx: ToolContext = {
+      spec: brief?.spec ?? null,
       turnId,
       workspace,
       emit,
@@ -115,6 +162,7 @@ export class Agent {
         approvalMode: settings.approvalMode,
         workspace,
         platform: this.host.platform,
+        brief: brief?.text,
       });
       const schemas = schemasFor(workspace);
       const tools = new Map(toolsFor(workspace).map((t) => [t.name, t]));
@@ -124,6 +172,7 @@ export class Agent {
       // back once or twice and let them correct themselves.
       let nudges = 0;
       const MAX_NUDGES = 2;
+      let reviewRounds = 0;
 
       for (let step = 0; step < MAX_STEPS; step++) {
         if (signal.aborted) break;
@@ -219,6 +268,57 @@ export class Agent {
             continue;
           }
 
+          // The model believes it has finished. Before the user is told that,
+          // Maestro reads what is actually on disk: it applies the fixes that
+          // cannot be wrong, and sends anything serious back to be repaired.
+          if (brief && !signal.aborted && reviewRounds < MAX_REVIEW_ROUNDS) {
+            reviewRounds++;
+            emit({ type: 'activity', label: 'Checking what was built' });
+
+            const repairs = await autoRepair(workspace, brief.spec, brief.design, (path) =>
+              this.checkpoints.capture(workspace, turnId, path),
+            );
+            for (const change of repairs.changed) {
+              const { added, removed } = diffStat(change.before, change.after);
+              emit({
+                type: 'file_change',
+                turnId,
+                change: { path: change.path, before: change.before, after: change.after, added, removed },
+              });
+            }
+            if (repairs.fixes.length) {
+              emit({ type: 'notice', level: 'info', message: `Tidied up — ${repairs.fixes.join('; ')}.` });
+            }
+
+            const findings = await inspect(workspace, brief.spec);
+            const counts = countBySeverity(findings);
+
+            if (counts.blocker + counts.major > 0) {
+              emit({
+                type: 'notice',
+                level: 'warn',
+                message: `Review found ${summarise(findings)} — sending it back to be fixed rather than calling it done.`,
+              });
+              this.messages.push({ role: 'user', content: reviewReport(findings) });
+              nudges = 0;
+              continue;
+            }
+
+            emit({
+              type: 'notice',
+              level: 'info',
+              message: findings.length
+                ? `Review passed — only ${summarise(findings)} left, none of it broken.`
+                : 'Review passed: nothing broken, nothing missing, nothing left as a placeholder.',
+            });
+          }
+
+          // Nothing was built and nobody is going to fix that. Rather than
+          // leave an empty project, build it here — offline, instantly.
+          if (brief && !brief.spec.isEdit && !signal.aborted && (await workspace.walk()).length === 0) {
+            await this.rescueBuild(brief, workspace, turnId, emit);
+          }
+
           emit({ type: 'turn_end', turnId, stopReason: result.stopReason });
           break;
         }
@@ -277,6 +377,34 @@ export class Agent {
       this.aborter = null;
       emit({ type: 'idle' });
     }
+  }
+
+  /**
+   * The turn produced nothing at all — the model refused, drifted, or only
+   * talked. Maestro builds the thing itself so the user is never left with an
+   * empty folder after asking for something.
+   */
+  private async rescueBuild(
+    brief: Brief,
+    workspace: Workspace,
+    turnId: string,
+    emit: (event: AgentEvent) => void,
+  ): Promise<void> {
+    emit({ type: 'activity', label: 'Building it here instead' });
+    emit({
+      type: 'notice',
+      level: 'warn',
+      message: 'The model replied without creating anything, so the builder inside the app made it instead.',
+    });
+
+    const project = buildNatively(brief);
+    for (const [path, content] of Object.entries(project.files)) {
+      const before = await this.checkpoints.capture(workspace, turnId, path);
+      await workspace.write(path, content);
+      const { added, removed } = diffStat(before, content);
+      emit({ type: 'file_change', turnId, change: { path, before, after: content, added, removed } });
+    }
+    emit({ type: 'todos', items: project.plan.map((text) => ({ text, status: 'done' as const })) });
   }
 
   /** One request to the provider, with a sign-in retry for the free tier. */
@@ -366,6 +494,8 @@ function describeCall(name: string, input: any): string {
       return `Running ${String(input?.command ?? '').slice(0, 50)}`;
     case 'update_plan':
       return 'Updating the plan';
+    case 'review_project':
+      return 'Reviewing what it built';
     default:
       return name;
   }

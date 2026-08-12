@@ -41,20 +41,48 @@ endpoint** you point it at.
 | OpenAI | — | key | GPT |
 | Custom endpoint | depends | optional | LM Studio, vLLM, a gateway at work |
 
-### You are never stuck with nothing
+### Maestro — the intelligence that ships with the app
 
-Two of those need neither an account nor a connection:
+Every provider above is somebody else's model. **Maestro** is the part that is
+ours: a planner, an art director and a code reviewer that run on your own
+machine, with no account, no key and no network.
 
-**Built in** is not a language model. It reads your prompt, recognises what you
-are after, and builds it from a blueprint — a maze game, snake, a to-do list, a
-focus timer, a landing page, or a styled starter page for anything else. Each
-one is a complete working app in plain HTML/CSS/JS. Instant, offline, every
-time. It can only make what it knows, but it always makes *something*.
+It sits on both sides of whichever AI you picked.
 
-**On this machine** downloads a Qwen2.5-Coder model and runs it on your own GPU
-through WebGPU. Slower and weaker than the hosted models, and it needs a few
-gigabytes, but after the first download it works with no internet at all and
-nothing you type leaves the computer.
+**Before.** Your sentence is compiled into an actual specification. "Make a
+dance game" becomes: a rhythm game; notes spawn 40 px above the field and take
+1.6 seconds to reach a hit line at y 540; perfect is ±55 ms; four lanes on
+D F J K with a tap target per lane; here is the palette, in hex. That brief —
+usually around seven kilobytes of requirements, tuned numbers and the specific
+ways this kind of project ships broken — goes to the model before it writes a
+line. It is the difference between a model inventing 95% of the requirement and
+a model implementing one.
+
+**After.** The files that actually landed are read back and checked by about
+forty-five rules: scripts that are referenced but missing, code that does not
+parse, functions called but never defined, placeholder text left behind, a
+layout with no responsive rules, text below 4.5:1 contrast, a game with no way
+to lose, keyboard-only controls, and — the one that started this — anything the
+player has to react to being created inside the visible field instead of
+travelling in. Whatever can be safely fixed is fixed; anything serious goes
+back to the model to repair before you are told it is done.
+
+**On its own.** With no model at all, Maestro builds the whole thing itself:
+snake, brick breaker, a rhythm game, an endless runner, a shooter, pong, a
+maze, memory, tic-tac-toe, sliding numbers, a quiz, a to-do list, a calculator,
+a focus timer, a drawing pad, a dashboard, a landing page, a local business
+page, a portfolio or a résumé. Complete, playable, responsive, offline,
+instant — and if it has no generator for what you asked for, it builds the
+nearest thing it does have and tells you so rather than pretending.
+
+Turn it off in Settings if you would rather have the raw model.
+
+**On this machine** is the other option that needs nothing: it downloads a
+Qwen2.5-Coder model and runs it on your own GPU through WebGPU.
+
+Slower and weaker than the hosted models, and it needs a few gigabytes, but
+after the first download it works with no internet at all and nothing you type
+leaves the computer.
 
 ## What's in the window
 
@@ -89,6 +117,7 @@ live preview of the thing you just built.
 | | |
 |---|---|
 | **Prompt first** | No folder picker, no key wall. The first sentence you type creates the project and starts the build. |
+| **Maestro** | Plans the build before the AI starts and reviews the result afterwards — about 45 checks over the files that actually landed, with the serious ones sent back to be fixed. Runs on your machine, free, offline. |
 | **Seven providers** | Free by default; bring your own key for Claude, GPT, Gemini, OpenRouter, Ollama, or any OpenAI-compatible URL. |
 | **Runs anywhere** | The same app on the web (projects in browser storage) and on the desktop (real files, real shell). |
 | **Sign in, switch devices** | Start something in the browser on your laptop, open the desktop app, keep going. |
