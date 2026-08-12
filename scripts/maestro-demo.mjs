@@ -8,6 +8,7 @@
  */
 
 import { build } from 'esbuild';
+import { exec } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
@@ -266,7 +267,15 @@ function serve() {
     } catch (err) {
       res.writeHead(500).end(String(err));
     }
-  }).listen(PORT, () => console.log(`\nServing ${outDir} on http://localhost:${PORT}/`));
+  }).listen(PORT, () => {
+    const url = `http://localhost:${PORT}/`;
+    console.log(`\nServing ${outDir} on ${url}`);
+    // Hasan does not use a terminal: opened for him once the pages exist.
+    if (process.argv.includes('--open')) {
+      const opener = process.platform === 'win32' ? 'start ""' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+      exec(`${opener} ${url}`);
+    }
+  });
 }
 
 await generate();

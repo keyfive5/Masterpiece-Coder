@@ -32,7 +32,7 @@ this explicitly, so long sessions don't lose work).
 | Live web app | **https://keyfive5.github.io/Masterpiece-Coder/** (Pages → `main` `/docs`) |
 | Desktop app | `release\Masterpiece Coder.exe` — portable, 75 MB, no install, no Node needed |
 | iPhone shell | `ios-app/` (Expo WebView) |
-| Launchers | `START.bat`, `REBUILD.bat`, `MAKE-EXE.bat`, `ios-app\BUILD-IPHONE.bat` |
+| Launchers | `START.bat`, `REBUILD.bat`, `MAKE-EXE.bat`, `SEE-MAESTRO.cmd`, `ios-app\BUILD-IPHONE.bat` |
 
 One React + Monaco app runs on the web, on the desktop, and inside the iOS
 shell. The agent loop lives in `src/core` and is injected with a `Workspace`
